@@ -13,7 +13,15 @@ function App() {
   const [areasDict, setAreasDict] = useState({})
 
   // State
-  const [selectedDate, setSelectedDate] = useState(new Date())
+  const getLogicalToday = () => {
+    const d = new Date()
+    // 4時前なら前日を「今日」として扱う
+    if (d.getHours() < 4) {
+      d.setDate(d.getDate() - 1)
+    }
+    return d
+  }
+  const [selectedDate, setSelectedDate] = useState(getLogicalToday())
   const [selectedPrefecture, setSelectedPrefecture] = useState('東京')
   const [selectedArea, setSelectedArea] = useState('All')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -215,9 +223,8 @@ function App() {
         if (selectedPrefecture !== 'All') {
           query = query.eq('livehouses.prefecture', selectedPrefecture)
         }
-        if (selectedArea !== 'All') {
-          query = query.eq('livehouses.area', selectedArea)
-        }
+        // Area filtering is handled entirely on the client side (filteredEvents useMemo)
+        // to prevent loading flickers when switching areas.
 
         const { data, error } = await query
         
@@ -228,25 +235,6 @@ function App() {
         }
 
         let fetchedEvents = data || []
-        
-        // Always include ALL PR events for the selected prefecture if we are filtering by a specific area
-        if (selectedArea !== 'All' && selectedPrefecture !== 'All') {
-          const { data: prData, error: prError } = await supabase
-            .from('events')
-            .select(`*, livehouse:livehouses!inner(*)`)
-            .eq('date', dateStr)
-            .eq('is_pr', true)
-            .eq('livehouses.prefecture', selectedPrefecture)
-            
-          if (!prError && prData && prData.length > 0) {
-            const existingIds = new Set(fetchedEvents.map(e => e.id))
-            prData.forEach(prEvt => {
-              if (!existingIds.has(prEvt.id)) {
-                fetchedEvents.push(prEvt)
-              }
-            })
-          }
-        }
 
         // Fetch YouTube presence for all distinct artists
         const allArtistNames = new Set()
@@ -321,7 +309,7 @@ function App() {
     }
 
     fetchEventsFromSupabase()
-  }, [selectedDate, selectedArea, selectedPrefecture])
+  }, [selectedDate, selectedPrefecture])
   // === References for Modal Scrolling ===
   const modalBodyRef = useRef(null)
 
