@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700&display=swap');
+
+:root {
+  /* Dynamic Light Theme - Vibrant & Clean */
+  --bg-gradient: linear-gradient(135deg, #f0f4f8 0%, #d9e2ec 100%);
+  --glass-bg: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(255, 255, 255, 1);
+  --glass-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.08);
+
+  --text-primary: #102a43;
+  --text-secondary: #486581;
+
+  --accent-color: #ff3366;
+  --accent-hover: #e02856;
+  --card-hover-translate: translateY(-4px);
+
+  --surface-radius: 20px;
+
+  --control-bg: rgba(0, 0, 0, 0.05);
+  --control-border: rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dynamic Dark Theme - Immersive & Premium */
+    --bg-gradient: linear-gradient(135deg, #000000 0%, #0a0f1c 100%);
+    --glass-bg: rgba(255, 255, 255, 0.15);
+    --glass-border: rgba(255, 255, 255, 0.25);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+
+    --accent-color: #ff3366;
+
+    --control-bg: rgba(255, 255, 255, 0.15);
+    --control-border: rgba(255, 255, 255, 0.25);
+  }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  color: inherit;
+}
+
+button:focus {
+  outline: none;
+}
+
+/* Glassmorphism utility class */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--surface-radius);
+  box-shadow: var(--glass-shadow);
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.glass-panel:hover {
+  transform: var(--card-hover-translate);
+  box-shadow: 0 8px 25px 0 rgba(0, 0, 0, 0.12);
+}

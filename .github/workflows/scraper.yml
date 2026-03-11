@@ -1,0 +1,35 @@
+name: Daily Livehouse Scraper
+
+on:
+  schedule:
+    # 毎日 日本時間の 04:00 と 16:00 に実行 (UTC基準のため 19:00 と 07:00 を設定)
+    - cron: '0 19,7 * * *'
+  workflow_dispatch:
+    # GitHub画面上から手動で実行できるようにするボタン設定
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Background Scraper & YouTube Update script
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          cd backend
+          python run_all_jobs.py

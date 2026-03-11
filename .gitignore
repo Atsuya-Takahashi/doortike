@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+live_events.db
