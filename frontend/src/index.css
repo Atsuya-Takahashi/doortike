@@ -10,8 +10,8 @@
   --text-primary: #102a43;
   --text-secondary: #486581;
 
-  --accent-color: #ff3366;
-  --accent-hover: #e02856;
+  --accent-color: #1e3a8a; /* Navy Blue */
+  --accent-hover: #1e40af;
   --card-hover-translate: translateY(-4px);
 
   --surface-radius: 20px;

@@ -1190,7 +1190,7 @@ function App() {
                 </div>
               </button>
             </div>
-            <h1>ドアチケガイド</h1>
+            <h1>ドアチケ</h1>
           </header>
 
           <div className="location-filters" style={{ padding: '10px 10px 10px' }}>
