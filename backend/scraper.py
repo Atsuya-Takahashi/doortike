@@ -4,6 +4,10 @@ from playwright.async_api import async_playwright
 from models import SessionLocal, LiveHouse, Event, Artist
 from youtube_service import search_artist_video
 import re
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 1回のスクレイパー実行で呼べるYouTube APIの上限（100ユニット×90=9,000ユニット/日）
 DAILY_FETCH_LIMIT = 90
@@ -55,114 +59,187 @@ def fetch_youtube_for_new_artists(db_session, performers_str: str, youtube_fetch
     return youtube_fetch_count
 
 
-async def scrape_shinjuku_loft(page, date: datetime, db_session, youtube_fetch_count: int) -> int:
-    # url format example: https://www.loft-prj.co.jp/schedule/loft/date/2026/03/04
-    year = date.year
-    month = f"{date.month:02d}"
-    day = f"{date.day:02d}"
-    url = f"https://www.loft-prj.co.jp/schedule/loft/date/{year}/{month}/{day}"
-    print(f"Scraping {url}")
+async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, target_dates: list, db_session, youtube_fetch_count: int) -> int:
+    """
+    Generic scraper for LOFT PROJECT venues (LOFT, SHELTER, etc.)
+    """
+    # Use the general schedule page to find events
+    base_url = f"https://www.loft-prj.co.jp/schedule/{venue_slug}/schedule"
+    print(f"Scraping {venue_name} at {base_url}")
     
-    await page.goto(url)
-    await page.wait_for_load_state("networkidle")
+    await page.goto(base_url)
+    # Wait for the content to be loaded
+    try:
+        await page.wait_for_selector('a.js-cursor-elm', timeout=10000)
+    except:
+        print(f"[{venue_name}] No events found or page structure mismatch.")
+        return youtube_fetch_count
     
-    livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == "新宿LOFT").first()
+    livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
     if not livehouse:
-        livehouse = LiveHouse(name="新宿LOFT", area="新宿", latitude=35.6953, longitude=139.7011, url="https://www.loft-prj.co.jp/loft/")
+        # This shouldn't happen if areas were seeded
+        livehouse = LiveHouse(name=venue_name, area="Unknown", latitude=0, longitude=0, url=f"https://www.loft-prj.co.jp/{venue_slug}/")
         db_session.add(livehouse)
         db_session.commit()
+
+    # Find all event links on the schedule page
+    event_links = await page.query_selector_all('a.js-cursor-elm')
     
-    events = await page.query_selector_all('.schedule-box')
-    for evt in events:
-        title_elem = await evt.query_selector('.title')
-        if title_elem:
-            title = await title_elem.inner_text()
-            title = title.strip()
+    processed_hrefs = set()
+    
+    for link in event_links:
+        href = await link.get_attribute('href')
+        if not href or href in processed_hrefs: continue
+        processed_hrefs.add(href)
+        
+        # Date is inside <time> element as separate divs
+        time_elem = await link.query_selector('time')
+        if not time_elem: continue
+        
+        time_divs = await time_elem.query_selector_all('div')
+        if len(time_divs) < 3: continue
+        
+        try:
+            year_str = await time_divs[0].inner_text()
+            month_str = await time_divs[1].inner_text()
+            day_str = await time_divs[2].inner_text()
             
-            performers_elem = await evt.query_selector('.act')
-            performers = await performers_elem.inner_text() if performers_elem else ""
+            event_date_str = f"{year_str.strip()}-{month_str.strip()}-{day_str.strip()}"
+            event_date = datetime.strptime(event_date_str, "%Y-%m-%d")
+        except Exception as e:
+            print(f"[{venue_name}] Failed to parse date: {e}")
+            continue
+        
+        found_date = None
+        for target_date in target_dates:
+            if event_date.date() == target_date.date():
+                found_date = target_date
+                break
+        
+        if not found_date: continue
+        
+        print(f"[{venue_name}] Found event for {found_date.date()}: {href}")
+        
+        # Go to detail page in the same page object to avoid context issues
+        detail_page = await page.context.browser.new_page()
+        try:
+            await detail_page.goto(href)
+            await detail_page.wait_for_load_state("networkidle")
             
-            time_elem = await evt.query_selector('.time')
+            # Robust Title extraction
+            title = "Unknown Title"
+            for selector in ['h1.c_title span', 'h1.c_title', 'h1.mainTitle', 'h1']:
+                title_elem = await detail_page.query_selector(selector)
+                if title_elem:
+                    title_text = await title_elem.inner_text()
+                    if title_text.strip():
+                        title = title_text.strip()
+                        break
+            
+            # Robust Performers extraction
+            performers_str = ""
+            # Try list first
+            performers_elems = await detail_page.query_selector_all('.actList li')
+            if performers_elems:
+                performers = []
+                for p_elem in performers_elems:
+                    p_text = await p_elem.inner_text()
+                    if p_text.strip(): performers.append(p_text.strip())
+                performers_str = ", ".join(performers)
+            
+            # Fallback to .entry p (found by subagent recently)
+            if not performers_str:
+                entry_elem = await detail_page.query_selector('.entry p span strong')
+                if not entry_elem:
+                    entry_elem = await detail_page.query_selector('.entry p')
+                
+                if entry_elem:
+                    p_text = await entry_elem.inner_text()
+                    # Clean up: sometimes it's "ACT: artist1 / artist2"
+                    performers_str = p_text.replace("ACT:", "").replace("出演:", "").strip()
+            
+            time_elem = await detail_page.query_selector('.openStart')
+            if not time_elem:
+                time_elem = await detail_page.query_selector('.open-start')
+            
             time_text = await time_elem.inner_text() if time_elem else ""
             open_time, start_time = "", ""
-            if "OPEN" in time_text and "START" in time_text:
-                parts = time_text.split("/")
-                for p in parts:
-                    if "OPEN" in p: open_time = p.replace("OPEN", "").strip()
-                    if "START" in p: start_time = p.replace("START", "").strip()
-            
-            price_elem = await evt.query_selector('.adv-door')
-            price_text = await price_elem.inner_text() if price_elem else ""
+            if time_text:
+                match_open = re.search(r'OPEN\s*(\d{2}:\d{2})', time_text)
+                if match_open: open_time = match_open.group(1)
+                match_start = re.search(r'START\s*(\d{2}:\d{2})', time_text)
+                if match_start: start_time = match_start.group(1)
+                
+            price_elem = await detail_page.query_selector('.price')
+            if not price_elem:
+                price_elem = await detail_page.query_selector('.ticketWrap .price')
+            price_info = await price_elem.inner_text() if price_elem else ""
             
             ticket_url = None
-            ticket_links = await evt.query_selector_all('a')
-            for link in ticket_links:
-                href = await link.get_attribute('href')
-                if href:
-                    text = await link.inner_text()
-                    if any(domain in href for domain in ['eplus.jp', 't.pia.jp', 'l-tike.com', 'tiget.net', 't.livepocket.jp']) or any(kw in text for kw in ['チケット', '予約', '購入', 'e+', 'イープラス', 'ぴあ', 'ローソン', 'TIGET']):
-                        ticket_url = href
+            for t_selector in ['.ticketList a', '.ticketWrap a', '.entry a']:
+                ticket_link_elem = await detail_page.query_selector(t_selector)
+                if ticket_link_elem:
+                    t_href = await ticket_link_elem.get_attribute('href')
+                    if t_href and any(domain in t_href for domain in ['eplus.jp', 't.pia.jp', 'l-tike.com', 'tiget.net', 't.livepocket.jp']):
+                        ticket_url = t_href
                         break
 
+            # Check if event already exists
             existing_event = db_session.query(Event).filter(
-                Event.livehouse_id == livehouse.id, Event.date == date.date(), Event.title == title
+                Event.livehouse_id == livehouse.id, Event.date == found_date.date(), Event.title == title
             ).first()
             
             if not existing_event:
                 new_event = Event(
                     livehouse_id=livehouse.id,
-                    date=date.date(),
+                    date=found_date.date(),
                     title=title,
-                    performers=performers.strip(),
+                    performers=performers_str,
                     open_time=open_time,
                     start_time=start_time,
-                    price_info=price_text.strip(),
+                    price_info=price_info.strip(),
                     ticket_url=ticket_url
                 )
                 db_session.add(new_event)
                 db_session.commit()
                 print(f"Added new event: {title}")
-
-            # 新規・既存問わず、未キャッシュアーティストの動画を取得
+            
             youtube_fetch_count = fetch_youtube_for_new_artists(
-                db_session, performers.strip(), youtube_fetch_count
+                db_session, performers_str, youtube_fetch_count
             )
+        except Exception as detail_err:
+            print(f"Error scraping detail page {href}: {detail_err}")
+        finally:
+            await detail_page.close()
 
     return youtube_fetch_count
 
 
 async def async_run_all_scrapers():
     db = SessionLocal()
-    today = datetime.now()
-    tomorrow = today + timedelta(days=1)
+    # Handle JST time (+9h from UTC)
+    now_jst = datetime.utcnow() + timedelta(hours=9)
+    today = now_jst
+    tomorrow = now_jst + timedelta(days=1)
     
-    dates_to_scrape = [today, tomorrow]
-    youtube_fetch_count = 0  # 本日のAPI呼び出しカウンター
+    target_dates = [today, tomorrow]
+    youtube_fetch_count = 0
     
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         
-        for date in dates_to_scrape:
-            shibuya_quattro = db.query(LiveHouse).filter(LiveHouse.name == "渋谷CLUB QUATTRO").first()
-            if not shibuya_quattro:
-                shibuya_quattro = LiveHouse(name="渋谷CLUB QUATTRO", area="渋谷", latitude=35.6611, longitude=139.6982, url="https://www.club-quattro.com/")
-                db.add(shibuya_quattro)
-                db.commit()
+        # 1. Shinjuku LOFT
+        try:
+            youtube_fetch_count = await scrape_loft_project_venue(page, "新宿LOFT", "loft", target_dates, db, youtube_fetch_count)
+        except Exception as e:
+            print(f"Error scraping Shinjuku LOFT: {e}")
 
-            try:
-                youtube_fetch_count = await scrape_shinjuku_loft(page, date, db, youtube_fetch_count)
-            except Exception as e:
-                print(f"Error scraping Shinjuku LOFT on {date}: {e}")
-            
-            if db.query(Event).filter(Event.date == date.date()).count() == 0:
-                print(f"Inserting fallback mock events for {date.date()}")
-                dummy_events = [
-                    Event(livehouse_id=1, date=date.date(), title="ROCK N ROLL NIGHT", performers="THE BAND, GUESTS", open_time="18:30", start_time="19:00", price_info="ADV ¥3,000 / DOOR ¥3,500"),
-                    Event(livehouse_id=shibuya_quattro.id, date=date.date(), title="SHIBUYA INDIE FEST", performers="Indie Star, New Comer, Next Break", open_time="17:00", start_time="17:30", price_info="ADV ¥4,000 / DOOR ¥4,500")
-                ]
-                db.add_all(dummy_events)
-                db.commit()
+        # 2. Shimokitazawa SHELTER
+        try:
+            youtube_fetch_count = await scrape_loft_project_venue(page, "下北沢SHELTER", "shelter", target_dates, db, youtube_fetch_count)
+        except Exception as e:
+            print(f"Error scraping Shimokitazawa SHELTER: {e}")
                 
         await browser.close()
 
@@ -175,4 +252,3 @@ def run_all_scrapers():
 
 if __name__ == "__main__":
     run_all_scrapers()
-
