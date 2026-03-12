@@ -1861,7 +1861,7 @@ function App() {
             <div className="modal-body" style={{ padding: '32px 24px', color: 'var(--text-primary)' }}>
               {/* Header Group */}
               <div className="about-header-group">
-                <h2 className="about-main-title">今すぐ、ライブへ。</h2>
+                <h2 className="about-main-title">今すぐ、ライブハウスへ。</h2>
                 <p className="about-sub-title">
                   ドアチケは、 あなたの「突発的な衝動」を後押しする{"\n"}
                   直前特化のライブディグアプリです。
