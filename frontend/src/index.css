@@ -31,10 +31,11 @@
     --text-primary: #f8fafc;
     --text-secondary: #cbd5e1;
 
-    --accent-color: #ff3366;
+    --accent-color: #3b82f6; /* Vibrant Blue for Dark Mode visibility */
+    --accent-hover: #60a5fa;
 
-    --control-bg: rgba(255, 255, 255, 0.15);
-    --control-border: rgba(255, 255, 255, 0.25);
+    --control-bg: rgba(255, 255, 255, 0.1);
+    --control-border: rgba(255, 255, 255, 0.2);
   }
 }
 
