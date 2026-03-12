@@ -1,6 +1,9 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 Base = declarative_base()
 
@@ -60,6 +63,9 @@ if DATABASE_URL:
     # Ensure correct dialect prefix if it's 'postgres://' (SQLAlchemy 1.4+ expects 'postgresql://')
     if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
         SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    
+    if "?pgbouncer=" in SQLALCHEMY_DATABASE_URL:
+        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.split("?")[0]
     
     # pool_pre_ping ensures the connection hasn't been dropped
     engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
