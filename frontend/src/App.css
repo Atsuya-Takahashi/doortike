@@ -480,24 +480,16 @@
 }
 
 .performer-name {
-  display: inline-block;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
+  display: inline;
+  vertical-align: baseline;
 }
 
 .performer-link {
   color: #4a9eda;
   text-decoration: none;
   transition: color 0.15s ease;
-  display: inline-block;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  vertical-align: bottom;
+  display: inline;
+  vertical-align: baseline;
   cursor: pointer;
 }
 

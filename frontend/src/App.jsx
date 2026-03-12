@@ -14,12 +14,7 @@ function App() {
 
   // State
   const getLogicalToday = () => {
-    const d = new Date()
-    // 4時前なら前日を「今日」として扱う
-    if (d.getHours() < 4) {
-      d.setDate(d.getDate() - 1)
-    }
-    return d
+    return new Date() // Return actual calendar today
   }
   const [selectedDate, setSelectedDate] = useState(getLogicalToday())
   const [selectedPrefecture, setSelectedPrefecture] = useState('東京')
@@ -211,6 +206,8 @@ function App() {
       setIsLoading(true)
       try {
         const dateStr = format(selectedDate, 'yyyy-MM-dd')
+        const realToday = new Date()
+        const isSelectedDateRealToday = format(selectedDate, 'yyyy-MM-dd') === format(realToday, 'yyyy-MM-dd')
         
         let query = supabase
           .from('events')
@@ -218,7 +215,14 @@ function App() {
             *,
             livehouse:livehouses!inner(*)
           `)
-          .eq('date', dateStr)
+
+        if (isSelectedDateRealToday && realToday.getHours() < 4) {
+          // Fetch both today and yesterday
+          const yesterdayStr = format(addDays(selectedDate, -1), 'yyyy-MM-dd')
+          query = query.in('date', [dateStr, yesterdayStr])
+        } else {
+          query = query.eq('date', dateStr)
+        }
 
         if (selectedPrefecture !== 'All') {
           query = query.eq('livehouses.prefecture', selectedPrefecture)
@@ -240,7 +244,7 @@ function App() {
         const allArtistNames = new Set()
         fetchedEvents.forEach(evt => {
           if (evt.performers) {
-             const names = evt.performers.split(/[、,／/]/).map(n => n.trim()).filter(Boolean)
+             const names = evt.performers.split(/[、,／/\n]/).map(n => n.trim()).filter(Boolean)
              names.forEach(n => allArtistNames.add(n))
           }
         })
@@ -264,7 +268,7 @@ function App() {
         const formattedEvents = fetchedEvents.map(evt => {
            let performers_info = []
            if (evt.performers) {
-              const names = evt.performers.split(/[、,／/]/).map(n => n.trim()).filter(Boolean)
+              const names = evt.performers.split(/[、,／/\n]/).map(n => n.trim()).filter(Boolean)
               performers_info = names.map(aname => ({
                  name: aname,
                  has_video: artistsMap[aname] ? artistsMap[aname].has_video : false
@@ -599,7 +603,7 @@ function App() {
               const infoList = evt.performers_info && evt.performers_info.length > 0
                 ? evt.performers_info
                 : (evt.performers
-                  ? evt.performers.split(/[、,／/]\s*/).filter(p => p.trim()).map(p => ({ name: p.trim(), has_video: false }))
+                  ? evt.performers.split(/[、,／/\n]\s*/).filter(p => p.trim()).map(p => ({ name: p.trim(), has_video: false }))
                   : []);
 
               return infoList.map((perfInfo, index) => (
@@ -630,7 +634,7 @@ function App() {
                   ) : (
                     <span className="performer-name">{perfInfo.name}</span>
                   )}
-                  {index < infoList.length - 1 ? <span style={{ margin: '0 4px', color: 'var(--text-secondary)', opacity: 0.5 }}>/</span> : ''}
+                  {index < infoList.length - 1 ? <span style={{ margin: '0 6px', color: 'var(--text-secondary)' }}>/</span> : ''}
                 </span>
               ));
             })()}
@@ -654,11 +658,11 @@ function App() {
               </span>
             )}
 
-            {(evt.blog_url || evt.coupon_url) && (
+            {(evt.livehouse.blog_url || evt.coupon_url) && (
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: evt.livehouse.drink_fee ? '0' : 'auto' }}>
-                {evt.blog_url && (
+                {evt.livehouse.blog_url && (
                   <a
-                    href={evt.blog_url}
+                    href={evt.livehouse.blog_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
@@ -816,9 +820,7 @@ function App() {
   // Handle late-night events: if it's before 4 AM, "today" should be the previous calendar day.
   const now = new Date()
   const today = new Date(now)
-  if (now.getHours() < 4) {
-    today.setDate(today.getDate() - 1)
-  }
+  // Remove 4 AM shift here as well for consistent reference
   const tomorrow = addDays(today, 1)
 
   const todayStr = format(today, 'yyyy-MM-dd')
@@ -926,13 +928,26 @@ function App() {
 
     const todayStr = format(selectedDate, 'yyyy-MM-dd')
     const tomorrowStr = format(addDays(selectedDate, 1), 'yyyy-MM-dd')
+    const realToday = new Date()
+    const isSelectedDateRealToday = todayStr === format(realToday, 'yyyy-MM-dd')
+    const isBefore4AM = realToday.getHours() < 4
 
     // 1. Separate by day
-    const todayEvents = finalFiltered.filter(e => e.date === todayStr)
+    // If it's today and before 4 AM, include yesterday's midnight events
+    let todayEvents = []
+    if (isSelectedDateRealToday && isBefore4AM) {
+      const yesterdayStr = format(addDays(selectedDate, -1), 'yyyy-MM-dd')
+      todayEvents = finalFiltered.filter(e => 
+        e.date === todayStr || (e.date === yesterdayStr && e.is_midnight)
+      )
+    } else {
+      todayEvents = finalFiltered.filter(e => e.date === todayStr)
+    }
+    
     const tomorrowEventsRaw = finalFiltered.filter(e => e.date === tomorrowStr)
 
     // 2. Today's grouping
-    const todayRegularFull = todayEvents.filter(e => !e.is_midnight)
+    const todayRegularFull = todayEvents.filter(e => !e.is_midnight && e.date === todayStr)
     const todayMidnightFull = todayEvents.filter(e => e.is_midnight)
 
     const processGroup = (group) => {

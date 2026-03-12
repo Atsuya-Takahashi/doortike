@@ -30,6 +30,7 @@ class LiveHouse(Base):
     url = Column(String, nullable=True)
     has_discount = Column(Boolean, default=False)
     drink_fee = Column(Integer, nullable=True)
+    blog_url = Column(String, nullable=True)
     
     events = relationship("Event", back_populates="livehouse")
 

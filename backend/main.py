@@ -87,7 +87,7 @@ def get_events(
         performers_info = []
         if evt.performers:
             import re
-            artist_names = [a.strip() for a in re.split(r'[、,／/]', evt.performers) if a.strip()]
+            artist_names = [a.strip() for a in re.split(r'[、,／/\n]', evt.performers) if a.strip()]
             for aname in artist_names:
                 artist_row = db.query(Artist).filter(Artist.name == aname).first()
                 has_video = bool(
@@ -121,7 +121,8 @@ def get_events(
                 "latitude": evt.livehouse.latitude,
                 "longitude": evt.livehouse.longitude,
                 "url": evt.livehouse.url,
-                "drink_fee": getattr(evt.livehouse, 'drink_fee', None)
+                "drink_fee": getattr(evt.livehouse, 'drink_fee', None),
+                "blog_url": getattr(evt.livehouse, 'blog_url', None)
             }
         })
     return result

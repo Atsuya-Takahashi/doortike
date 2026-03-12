@@ -9,6 +9,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def sanitize_price_info(text):
+    if not text: return ""
+    lines = text.split('\n')
+    clean_lines = []
+    for line in lines:
+        # Stop collecting lines if any of these "on-sale" or "order" labels are encountered
+        if any(label in line for label in ["[発売]", "【発売日】", "【入場順】", "[発売日]", "【発売】", "［発売］"]):
+            break
+        clean_lines.append(line)
+    return "\n".join(clean_lines).strip()
+
 # 1回のスクレイパー実行で呼べるYouTube APIの上限（100ユニット×90=9,000ユニット/日）
 DAILY_FETCH_LIMIT = 90
 
@@ -149,28 +160,32 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
             
             # Fallback to .entry p (found by subagent recently)
             if not performers_str:
-                entry_elem = await detail_page.query_selector('.entry p span strong')
-                if not entry_elem:
-                    entry_elem = await detail_page.query_selector('.entry p')
-                
-                if entry_elem:
-                    p_text = await entry_elem.inner_text()
-                    # Clean up: sometimes it's "ACT: artist1 / artist2"
-                    performers_str = p_text.replace("ACT:", "").replace("出演:", "").strip()
+                for p_selector in ['.entry p span strong', '.entry p', '.entry']:
+                    entry_elem = await detail_page.query_selector(p_selector)
+                    if entry_elem:
+                        p_text = await entry_elem.inner_text()
+                        if p_text.strip():
+                            performers_str = p_text.replace("ACT:", "").replace("出演:", "").strip()
+                            break
             
-            time_elem = await detail_page.query_selector('.openStart')
+            time_elem = await detail_page.query_selector('.open')
+            if not time_elem:
+                time_elem = await detail_page.query_selector('.openStart')
             if not time_elem:
                 time_elem = await detail_page.query_selector('.open-start')
             
             time_text = await time_elem.inner_text() if time_elem else ""
             open_time, start_time = "", ""
             if time_text:
-                match_open = re.search(r'OPEN\s*(\d{2}:\d{2})', time_text)
+                # Handle spaces and newlines between label and time
+                match_open = re.search(r'OPEN\s*(\d{2}:\d{2})', time_text, re.IGNORECASE)
                 if match_open: open_time = match_open.group(1)
-                match_start = re.search(r'START\s*(\d{2}:\d{2})', time_text)
+                match_start = re.search(r'START\s*(\d{2}:\d{2})', time_text, re.IGNORECASE)
                 if match_start: start_time = match_start.group(1)
                 
-            price_elem = await detail_page.query_selector('.price')
+            price_elem = await detail_page.query_selector('.ticket_detail_box')
+            if not price_elem:
+                price_elem = await detail_page.query_selector('.price')
             if not price_elem:
                 price_elem = await detail_page.query_selector('.ticketWrap .price')
             price_info = await price_elem.inner_text() if price_elem else ""
@@ -183,6 +198,18 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                     if t_href and any(domain in t_href for domain in ['eplus.jp', 't.pia.jp', 'l-tike.com', 'tiget.net', 't.livepocket.jp']):
                         ticket_url = t_href
                         break
+
+            # Determine if it's a late-night event (is_midnight)
+            is_midnight = False
+            time_to_check = start_time or open_time
+            if time_to_check:
+                try:
+                    hour = int(time_to_check.split(":")[0])
+                    # 21:00 or later, or early morning (club events)
+                    if hour >= 21 or hour < 5:
+                        is_midnight = True
+                except:
+                    pass
 
             # Check if event already exists
             existing_event = db_session.query(Event).filter(
@@ -197,12 +224,21 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                     performers=performers_str,
                     open_time=open_time,
                     start_time=start_time,
-                    price_info=price_info.strip(),
-                    ticket_url=ticket_url
+                    price_info=sanitize_price_info(price_info),
+                    ticket_url=ticket_url,
+                    is_midnight=is_midnight
                 )
                 db_session.add(new_event)
                 db_session.commit()
-                print(f"Added new event: {title}")
+                print(f"[{venue_name}] Added new event: {title} (Midnight: {is_midnight})")
+            else:
+                # Update is_midnight even for existing events if needed
+                if existing_event.is_midnight != is_midnight:
+                    existing_event.is_midnight = is_midnight
+                    db_session.commit()
+                    print(f"[{venue_name}] Updated existing event is_midnight flag: {title}")
+                else:
+                    print(f"[{venue_name}] Skipping existing event: {title}")
             
             youtube_fetch_count = fetch_youtube_for_new_artists(
                 db_session, performers_str, youtube_fetch_count
