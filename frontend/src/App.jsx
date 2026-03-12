@@ -9,6 +9,7 @@ import './App.css'
 
 function App() {
   console.log("App function started executing");
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
   const [events, setEvents] = useState([])
   const [areasDict, setAreasDict] = useState({})
 
@@ -613,7 +614,7 @@ function App() {
                       className="performer-link"
                       onClick={() => {
                         setVideoModal({ artistName: perfInfo.name, loading: true, videoId: null, reported: false, ticketUrl: evt.ticket_url || null });
-                        fetch(`http://localhost:8000/api/artist_video?name=${encodeURIComponent(perfInfo.name)}`)
+                        fetch(`${API_BASE_URL}/api/artist_video?name=${encodeURIComponent(perfInfo.name)}`)
                           .then(r => r.json())
                           .then(data => {
                             setVideoModal(prev => prev?.artistName === perfInfo.name
@@ -1823,7 +1824,7 @@ function App() {
                     </span>
                     <button
                       onClick={() => {
-                        fetch(`http://localhost:8000/api/report_video?name=${encodeURIComponent(videoModal.artistName)}`, { method: 'POST' });
+                        fetch(`${API_BASE_URL}/api/report_video?name=${encodeURIComponent(videoModal.artistName)}`, { method: 'POST' });
                         setVideoModal(prev => ({ ...prev, reported: true, videoId: null, confirmReport: false }));
                       }}
                       style={{ padding: '4px 12px', background: '#cc3333', border: 'none', borderRadius: '6px', color: '#fff', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
