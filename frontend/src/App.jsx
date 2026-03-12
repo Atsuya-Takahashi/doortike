@@ -1209,10 +1209,13 @@ function App() {
                   </button>
                   <button
                     className={`tab-btn ${format(selectedDate, 'yyyy-MM-dd') === format(tomorrow, 'yyyy-MM-dd') ? 'active' : ''}`}
-                    onClick={() => { }}
-                    style={{ cursor: 'default', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    onClick={() => {
+                      if (format(selectedDate, 'yyyy-MM-dd') !== format(tomorrow, 'yyyy-MM-dd')) {
+                        setSelectedDate(tomorrow);
+                      }
+                    }}
                   >
-                    明日 <Lock size={12} style={{ opacity: 0.6 }} />
+                    明日
                   </button>
                 </div>
 
