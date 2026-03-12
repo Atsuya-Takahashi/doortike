@@ -1084,12 +1084,12 @@ function App() {
   // Privacy Policy View
   if (path === '/privacy') {
     return (
-      <div className="terms-page glass-panel" style={{ minHeight: '100vh', background: 'var(--bg-color)', color: 'var(--text-primary)' }}>
+      <div className="terms-page">
         <header className="terms-header">
           <button className="back-btn" onClick={() => navigateTo('/')}>
             <ChevronDown style={{ transform: 'rotate(90deg)' }} size={24} /> ホームへ戻る
           </button>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: '800', letterSpacing: '-0.02em' }}>プライバシーポリシー</h1>
+          <h1>プライバシーポリシー</h1>
         </header>
 
         <main className="terms-content glass-panel">
@@ -1861,7 +1861,7 @@ function App() {
             <div className="modal-body" style={{ padding: '32px 24px', color: 'var(--text-primary)' }}>
               {/* Header Group */}
               <div className="about-header-group">
-                <h2 className="about-main-title">ディグるなら、現場で。</h2>
+                <h2 className="about-main-title">今すぐ、ライブへ。</h2>
                 <p className="about-sub-title">
                   ドアチケは、 あなたの「突発的な衝動」を後押しする{"\n"}
                   直前特化のライブディグアプリです。
