@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { format, addDays } from 'date-fns'
-import { MapPin, Clock, Heart, Bookmark, Calendar, ChevronRight, ChevronDown, Activity, BookOpen, Ticket, X, CheckCircle, CreditCard, ArrowUp, ArrowDown, User, ExternalLink, ArrowUpRight, Moon, Sun, Briefcase, Plane, Zap, Lock } from 'lucide-react'
+import { MapPin, Clock, Heart, Bookmark, Calendar, ChevronRight, ChevronDown, Activity, BookOpen, Ticket, X, CheckCircle, CreditCard, ArrowUp, ArrowDown, User, ExternalLink, ArrowUpRight, Moon, Sun, Briefcase, Plane, Zap, Lock, Flag } from 'lucide-react'
 import { auth, db, googleProvider, appleProvider } from './firebase'
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'
@@ -58,6 +58,14 @@ function App() {
     }
   })
 
+  const [reportedVideos, setReportedVideos] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('reportedVideos') || '[]')
+    } catch {
+      return []
+    }
+  })
+
   const [bookmarkedEvents, setBookmarkedEvents] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('bookmarkedEvents') || '[]')
@@ -67,12 +75,16 @@ function App() {
   })
 
   const [isLoading, setIsLoading] = useState(true)
-  const [videoModal, setVideoModal] = useState(null) // { artistName, loading, videoId, reported }
+  const [videoModal, setVideoModal] = useState(null) // { artistName, loading, videoId, reported, eventId, ticketUrl, isConfirming }
 
   // Save to localStorage
   useEffect(() => {
     localStorage.setItem('likedVenues', JSON.stringify(likedVenues))
   }, [likedVenues])
+
+  useEffect(() => {
+    localStorage.setItem('reportedVideos', JSON.stringify(reportedVideos))
+  }, [reportedVideos])
 
   useEffect(() => {
     localStorage.setItem('bookmarkedEvents', JSON.stringify(bookmarkedEvents))
@@ -320,6 +332,46 @@ function App() {
       } catch (error) {
         console.error("Error updating liked venues in Firestore:", error);
       }
+    }
+  }
+
+  // === Video Reporting ===
+  const [isReporting, setIsReporting] = useState(false)
+  const handleReportVideo = async (confirmed = false) => {
+    if (!videoModal || !videoModal.eventId || isReporting) return;
+
+    if (!confirmed) {
+      setVideoModal(prev => ({ ...prev, isConfirming: true }));
+      return;
+    }
+
+    // Optimistic Update: Hide video immediately for "Magic UX"
+    setVideoModal(prev => ({ ...prev, reported: true, isConfirming: false }));
+    setIsReporting(true);
+
+    try {
+      const { error } = await supabase
+        .from('video_reports')
+        .insert([
+          { 
+            event_id: videoModal.eventId, 
+            artist_name: videoModal.artistName,
+            status: 'pending' 
+          }
+        ])
+
+      if (error) throw error;
+
+      // Persist locally so it can't be replayed on this terminal
+      if (!reportedVideos.includes(videoModal.artistName)) {
+        setReportedVideos(prev => [...prev, videoModal.artistName]);
+      }
+    } catch (error) {
+      console.error("Error reporting video:", error)
+      // Even if network fails, we keep it hidden for UX, but alert the user once
+      console.log("Failed to sync report to backend, but UI is updated optimistically.");
+    } finally {
+      setIsReporting(false);
     }
   }
 
@@ -585,7 +637,8 @@ function App() {
                           artistName: perfInfo.name, 
                           loading: false, 
                           videoId: perfInfo.youtube_id, 
-                          reported: false, 
+                          reported: reportedVideos.includes(perfInfo.name), 
+                          eventId: evt.id,
                           ticketUrl: evt.ticket_url || null 
                         });
                       }}
@@ -1744,6 +1797,49 @@ function App() {
             {/* Player body */}
             {videoModal.loading ? (
               <div style={{ padding: '30px', textAlign: 'center', color: '#aaaaaa', fontSize: '0.85rem' }}>検索中...</div>
+            ) : videoModal.isConfirming ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+                <div style={{ color: '#ffffff', fontWeight: 'bold', fontSize: '1rem', marginBottom: '15px' }}>
+                  この動画は間違っていますか？
+                </div>
+                <div style={{ color: '#cbd5e1', fontSize: '0.85rem', lineHeight: '1.5', marginBottom: '25px' }}>
+                  報告すると、運営で動画の修正を行います。<br />
+                  （一時的に動画が非表示になります）
+                </div>
+                <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                  <button
+                    onClick={() => setVideoModal(prev => ({ ...prev, isConfirming: false }))}
+                    style={{
+                      padding: '10px 24px',
+                      background: 'rgba(255,255,255,0.05)',
+                      color: '#ffffff',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    onClick={() => handleReportVideo(true)}
+                    disabled={isReporting}
+                    style={{
+                      padding: '10px 24px',
+                      background: isReporting ? '#ccc' : 'var(--accent-color)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      fontWeight: 'bold',
+                      cursor: isReporting ? 'not-allowed' : 'pointer',
+                      boxShadow: isReporting ? 'none' : '0 4px 12px rgba(255, 51, 102, 0.3)'
+                    }}
+                  >
+                    {isReporting ? '送信中...' : '報告する'}
+                  </button>
+                </div>
+              </div>
             ) : videoModal.videoId && !videoModal.reported ? (
               <>
                 <iframe
@@ -1775,10 +1871,31 @@ function App() {
                     🎫 チケットを確認する
                   </a>
                 )}
+                {/* 報告ボタン */}
+                <button
+                  onClick={() => handleReportVideo()}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    padding: '8px 14px',
+                    background: 'transparent',
+                    color: '#cbd5e1', border: 'none',
+                    fontSize: '0.75rem', cursor: 'pointer',
+                    width: '100%', marginBottom: '10px'
+                  }}
+                >
+                  <Flag size={14} /> この動画は間違っていますか？報告する
+                </button>
               </>
             ) : videoModal.reported ? (
-              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                報告を受け付けました。ありがとうございます。
+              <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+                <div style={{ background: 'rgba(34, 197, 94, 0.1)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 15px' }}>
+                  <CheckCircle size={28} color="#22c55e" />
+                </div>
+                <div style={{ color: '#ffffff', fontWeight: 'bold', fontSize: '1rem', marginBottom: '8px' }}>報告を受け付けました</div>
+                <div style={{ color: '#cbd5e1', fontSize: '0.85rem', lineHeight: '1.5' }}>
+                  ご報告ありがとうございます。<br />
+                  運営で確認し、修復いたします。
+                </div>
               </div>
             ) : (
               <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>

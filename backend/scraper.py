@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
-from models import SessionLocal, LiveHouse, Event, Artist
+from models import SessionLocal, LiveHouse, Event, Artist, VideoReport
 from youtube_service import search_artist_video
 import re
 import os
@@ -24,10 +24,11 @@ def sanitize_price_info(text):
 DAILY_FETCH_LIMIT = 90
 
 
-def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int) -> tuple[list, int]:
+def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int, pending_reports: dict = None) -> tuple[list, int]:
     """
     performers文字列を分割し、アーティスト名とYouTube IDのリストを返す。
     必要に応じて外部APIを叩き、キャッシュ（artistsテーブル）も更新する。
+    pending_reports: {artist_name: VideoReport object}
     """
     if not performers_str:
         return [], youtube_fetch_count
@@ -39,12 +40,38 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
     for artist_name in names:
         artist = db_session.query(Artist).filter(Artist.name == artist_name).first()
         video_id = None
+        report = pending_reports.get(artist_name) if pending_reports else None
 
-        # キャッシュのチェック（30日以内のデータがあれば採用）
-        if artist and artist.youtube_updated_at and (datetime.now() - artist.youtube_updated_at) < timedelta(days=30):
-            video_id = artist.youtube_video_id
-        else:
-            # キャッシュがない、または古い場合はYouTube APIを叩く（上限内であれば）
+        # 1. 報告あり (Priority 1)
+        if report and youtube_fetch_count < DAILY_FETCH_LIMIT:
+            exclude_ids = []
+            if artist and artist.reported_video_ids:
+                exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid]
+            
+            # キーワードを強化して検索
+            video_id = search_artist_video(artist_name, exclude_ids=exclude_ids, suffix="official MV")
+            youtube_fetch_count += 1
+            
+            # statusをresolvedに変更
+            report.status = 'resolved'
+            
+            if not artist:
+                artist = Artist(name=artist_name)
+                db_session.add(artist)
+            
+            artist.youtube_video_id = video_id
+            artist.youtube_updated_at = datetime.now()
+            artist.is_reported = False
+            
+            try:
+                db_session.commit()
+                print(f"[YouTube][Report Resolved] {artist_name} → {video_id} (本日{youtube_fetch_count}件目)")
+            except Exception as db_err:
+                db_session.rollback()
+                print(f"[YouTube] Error updating reported artist {artist_name}: {db_err}")
+
+        # 2. 新規 or 期限切れ (90日)
+        elif (not artist or not artist.youtube_updated_at or (datetime.now() - artist.youtube_updated_at) > timedelta(days=90)):
             if youtube_fetch_count < DAILY_FETCH_LIMIT:
                 exclude_ids = []
                 if artist and artist.reported_video_ids:
@@ -69,15 +96,18 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
                     db_session.rollback()
                     print(f"[YouTube] Error updating artist {artist_name}: {db_err}")
             else:
-                # 上限に達している場合はキャッシュがあれば古いものでも使い、なければNone
+                # 上限に達している場合はキャッシュがあれば使い、なければNone
                 video_id = artist.youtube_video_id if artist else None
+        else:
+            # 3. キャッシュ利用 (有効期限内)
+            video_id = artist.youtube_video_id
 
         artist_list.append({"name": artist_name, "youtube_id": video_id})
 
     return artist_list, youtube_fetch_count
 
 
-async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, target_dates: list, db_session, youtube_fetch_count: int) -> int:
+async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, target_dates: list, db_session, youtube_fetch_count: int, pending_reports: dict = None) -> int:
     """
     Generic scraper for LOFT PROJECT venues (LOFT, SHELTER, etc.)
     """
@@ -261,7 +291,7 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
 
                 # External API call (YouTube)
                 artists_data, youtube_fetch_count = get_artist_video_info(
-                    db_session, performers_str, youtube_fetch_count
+                    db_session, performers_str, youtube_fetch_count, pending_reports
                 )
 
                 # Re-fetch event using ID variable
@@ -302,10 +332,24 @@ async def async_run_all_scrapers():
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         
+        # 0. Fetch pending reports
+        db_reports = SessionLocal()
+        pending_reports = {}
+        try:
+            reports = db_reports.query(VideoReport).filter(VideoReport.status == 'pending').all()
+            for r in reports:
+                pending_reports[r.artist_name] = r
+            if pending_reports:
+                print(f"[Scraper] Found {len(pending_reports)} pending video reports to fix.")
+        except Exception as e:
+            print(f"Error fetching pending reports: {e}")
+        finally:
+            db_reports.close()
+
         # 1. Shinjuku LOFT
         db_loft = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_loft_project_venue(page, "新宿LOFT", "loft", target_dates, db_loft, youtube_fetch_count)
+            youtube_fetch_count = await scrape_loft_project_venue(page, "新宿LOFT", "loft", target_dates, db_loft, youtube_fetch_count, pending_reports)
         except Exception as e:
             db_loft.rollback()
             print(f"Error scraping Shinjuku LOFT: {e}")
@@ -315,7 +359,7 @@ async def async_run_all_scrapers():
         # 2. Shimokitazawa SHELTER
         db_shelter = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_loft_project_venue(page, "下北沢SHELTER", "shelter", target_dates, db_shelter, youtube_fetch_count)
+            youtube_fetch_count = await scrape_loft_project_venue(page, "下北沢SHELTER", "shelter", target_dates, db_shelter, youtube_fetch_count, pending_reports)
         except Exception as e:
             db_shelter.rollback()
             print(f"Error scraping Shimokitazawa SHELTER: {e}")

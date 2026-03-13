@@ -14,11 +14,12 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 from typing import Optional, List
 
-def search_artist_video(artist_name: str, exclude_ids: List[str] = []) -> Optional[str]:
+def search_artist_video(artist_name: str, exclude_ids: List[str] = [], suffix: str = "MV") -> Optional[str]:
     """
     アーティスト名でYouTube検索し、最適な動画IDを返す。
     タイトルにアーティスト名が含まれない場合はNoneを返す。
     exclude_ids: 除外する動画IDのリスト（報告済み動画）
+    suffix: 検索ワードの末尾に追加する文字列（デフォルトは "MV"）
     """
     if not YOUTUBE_API_KEY:
         print("YOUTUBE_API_KEY が設定されていません")
@@ -27,10 +28,10 @@ def search_artist_video(artist_name: str, exclude_ids: List[str] = []) -> Option
     try:
         youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
         
-        # 「アーティスト名 MV」で検索（より多くの候補を取得して除外に対応）
+        # 指定されたサフィックスで検索（より多くの候補を取得して除外に対応）
         request = youtube.search().list(
             part="snippet",
-            q=f"{artist_name} MV",
+            q=f"{artist_name} {suffix}",
             type="video",
             maxResults=10,
             videoEmbeddable="true",

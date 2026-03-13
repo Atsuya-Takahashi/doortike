@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, create_engine, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, create_engine, JSON, text
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import os
 from dotenv import load_dotenv
@@ -55,6 +55,18 @@ class Event(Base):
     artists_data = Column(JSON, nullable=True)  # Store list of performers with their youtube_id: [{"name": "...", "youtube_id": "..."}]
     
     livehouse = relationship("LiveHouse", back_populates="events")
+    reports = relationship("VideoReport", back_populates="event")
+
+class VideoReport(Base):
+    __tablename__ = 'video_reports'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey('events.id'), nullable=False)
+    artist_name = Column(String, nullable=False)
+    status = Column(String, default='pending') # 'pending', 'resolved', 'ignored'
+    created_at = Column(DateTime, server_default=text("now()"))
+    
+    event = relationship("Event", back_populates="reports")
 
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL")
