@@ -9,7 +9,6 @@ import './App.css'
 
 function App() {
   console.log("App function started executing");
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
   const [events, setEvents] = useState([])
   const [areasDict, setAreasDict] = useState({})
 
@@ -241,47 +240,13 @@ function App() {
 
         let fetchedEvents = data || []
 
-        // Fetch YouTube presence for all distinct artists
-        const allArtistNames = new Set()
-        fetchedEvents.forEach(evt => {
-          if (evt.performers) {
-             const names = evt.performers.split(/[、,／/\n]/).map(n => n.trim()).filter(Boolean)
-             names.forEach(n => allArtistNames.add(n))
-          }
-        })
-
-        let artistsMap = {}
-        if (allArtistNames.size > 0) {
-           const { data: artistsData, error: artistsError } = await supabase
-             .from('artists')
-             .select('*')
-             .in('name', Array.from(allArtistNames))
-             
-           if (artistsData && !artistsError) {
-              artistsData.forEach(row => {
-                 artistsMap[row.name] = {
-                   has_video: Boolean(row.youtube_video_id && !row.is_reported)
-                 }
-              })
-           }
-        }
-
         const formattedEvents = fetchedEvents.map(evt => {
-           let performers_info = []
-           if (evt.performers) {
-              const names = evt.performers.split(/[、,／/\n]/).map(n => n.trim()).filter(Boolean)
-              performers_info = names.map(aname => ({
-                 name: aname,
-                 has_video: artistsMap[aname] ? artistsMap[aname].has_video : false
-              }))
-           }
-
-           return {
-              id: evt.id,
-              title: evt.title,
-              performers: evt.performers,
-              performers_info: performers_info,
-              date: evt.date,
+            return {
+                ...evt,
+                id: evt.id,
+                title: evt.title,
+                performers: evt.performers,
+                date: evt.date,
               open_time: evt.open_time,
               start_time: evt.start_time,
               price_info: evt.price_info,
@@ -600,34 +565,29 @@ function App() {
 
           <p className="event-performers">
             {(() => {
-              // performers_info があればそれを使う（has_videoベースの表示制御）
-              const infoList = evt.performers_info && evt.performers_info.length > 0
-                ? evt.performers_info
+              // artists_data (JSONB) があれば優先的に使う
+              const infoList = evt.artists_data && evt.artists_data.length > 0
+                ? evt.artists_data.map(item => ({ 
+                    name: item.name, 
+                    youtube_id: item.youtube_id 
+                  }))
                 : (evt.performers
-                  ? evt.performers.split(/[、,／/\n]\s*/).filter(p => p.trim()).map(p => ({ name: p.trim(), has_video: false }))
+                  ? evt.performers.split(/[、,／/\n]\s*/).filter(p => p.trim()).map(p => ({ name: p.trim(), youtube_id: null }))
                   : []);
 
               return infoList.map((perfInfo, index) => (
                 <span key={index}>
-                  {perfInfo.has_video ? (
+                  {perfInfo.youtube_id ? (
                     <span
                       className="performer-link"
                       onClick={() => {
-                        setVideoModal({ artistName: perfInfo.name, loading: true, videoId: null, reported: false, ticketUrl: evt.ticket_url || null });
-                        fetch(`${API_BASE_URL}/api/artist_video?name=${encodeURIComponent(perfInfo.name)}`)
-                          .then(r => r.json())
-                          .then(data => {
-                            setVideoModal(prev => prev?.artistName === perfInfo.name
-                              ? { ...prev, loading: false, videoId: data.video_id || null }
-                              : prev
-                            );
-                          })
-                          .catch(() => {
-                            setVideoModal(prev => prev?.artistName === perfInfo.name
-                              ? { ...prev, loading: false, videoId: null }
-                              : prev
-                            );
-                          });
+                        setVideoModal({ 
+                          artistName: perfInfo.name, 
+                          loading: false, 
+                          videoId: perfInfo.youtube_id, 
+                          reported: false, 
+                          ticketUrl: evt.ticket_url || null 
+                        });
                       }}
                     >
                       {perfInfo.name}
@@ -1814,43 +1774,6 @@ function App() {
                   >
                     🎫 チケットを確認する
                   </a>
-                )}
-                {/* 報告ボタン（下部に小さく分離） */}
-                {videoModal.confirmReport ? (
-                  <div style={{ padding: '10px 14px', background: 'rgba(255,100,100,0.12)', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                    <span style={{ fontSize: '0.75rem', color: '#ffcccc', flex: 1, lineHeight: '1.4' }}>
-                      <div>公式映像でない・無関係な動画の場合に報告してください。</div>
-                      <div style={{ opacity: 0.7, fontSize: '0.7rem' }}>次回の検索時に別の動画が表示されます。</div>
-                    </span>
-                    <button
-                      onClick={() => {
-                        fetch(`${API_BASE_URL}/api/report_video?name=${encodeURIComponent(videoModal.artistName)}`, { method: 'POST' });
-                        setVideoModal(prev => ({ ...prev, reported: true, videoId: null, confirmReport: false }));
-                      }}
-                      style={{ padding: '4px 12px', background: '#cc3333', border: 'none', borderRadius: '6px', color: '#fff', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      報告する
-                    </button>
-                    <button
-                      onClick={() => setVideoModal(prev => ({ ...prev, confirmReport: false }))}
-                      style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '6px', color: '#ccc', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      キャンセル
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setVideoModal(prev => ({ ...prev, confirmReport: true }))}
-                    style={{
-                      width: '100%', padding: '8px 14px 14px',
-                      background: 'transparent',
-                      border: 'none', borderTop: '1px solid rgba(255,255,255,0.08)',
-                      color: 'rgba(255,255,255,0.72)', fontSize: '0.72rem', cursor: 'pointer', textAlign: 'center',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'
-                    }}
-                  >
-                    <span>🚩</span> <span>この動画を報告する</span>
-                  </button>
                 )}
               </>
             ) : videoModal.reported ? (

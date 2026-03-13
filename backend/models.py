@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, create_engine
+from sqlalchemy import Column, Integer, String, Float, Boolean, Date, DateTime, ForeignKey, create_engine, JSON
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import os
 from dotenv import load_dotenv
@@ -52,6 +52,7 @@ class Event(Base):
     pr_type = Column(String, nullable=True)  # 'featured' or 'fan_support'
     is_pickup = Column(Boolean, default=False)
     is_midnight = Column(Boolean, default=False)
+    artists_data = Column(JSON, nullable=True)  # Store list of performers with their youtube_id: [{"name": "...", "youtube_id": "..."}]
     
     livehouse = relationship("LiveHouse", back_populates="events")
 

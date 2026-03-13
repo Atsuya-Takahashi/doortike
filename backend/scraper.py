@@ -24,50 +24,57 @@ def sanitize_price_info(text):
 DAILY_FETCH_LIMIT = 90
 
 
-def fetch_youtube_for_new_artists(db_session, performers_str: str, youtube_fetch_count: int) -> int:
+def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int) -> tuple[list, int]:
     """
-    performers文字列を分割し、未キャッシュのアーティストにYouTube APIを呼ぶ。
-    youtube_fetch_count: 今回の実行で既に消費したAPI呼び出し数
-    返り値: 更新後のyoutube_fetch_count
+    performers文字列を分割し、アーティスト名とYouTube IDのリストを返す。
+    必要に応じて外部APIを叩き、キャッシュ（artistsテーブル）も更新する。
     """
-    if not performers_str or youtube_fetch_count >= DAILY_FETCH_LIMIT:
-        return youtube_fetch_count
+    if not performers_str:
+        return [], youtube_fetch_count
 
-    artists = [a.strip() for a in re.split(r'[、,／/]', performers_str) if a.strip()]
+    artist_list = []
+    # 区切り文字（、, ／ / \n）で分割
+    names = [a.strip() for a in re.split(r'[、,／/\n]', performers_str) if a.strip()]
 
-    for artist_name in artists:
-        if youtube_fetch_count >= DAILY_FETCH_LIMIT:
-            print(f"[YouTube] 本日の取得上限({DAILY_FETCH_LIMIT}件)に達しました。残りは次回実行時に取得されます。")
-            break
-
+    for artist_name in names:
         artist = db_session.query(Artist).filter(Artist.name == artist_name).first()
+        video_id = None
 
-        # 既にキャッシュあり（動画ありなし問わず、30日以内）はスキップ
-        if artist and artist.youtube_updated_at:
-            if (datetime.now() - artist.youtube_updated_at) < timedelta(days=30):
-                continue
+        # キャッシュのチェック（30日以内のデータがあれば採用）
+        if artist and artist.youtube_updated_at and (datetime.now() - artist.youtube_updated_at) < timedelta(days=30):
+            video_id = artist.youtube_video_id
+        else:
+            # キャッシュがない、または古い場合はYouTube APIを叩く（上限内であれば）
+            if youtube_fetch_count < DAILY_FETCH_LIMIT:
+                exclude_ids = []
+                if artist and artist.reported_video_ids:
+                    exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid]
+                
+                video_id = search_artist_video(artist_name, exclude_ids=exclude_ids)
+                youtube_fetch_count += 1
 
-        # YouTube API で検索
-        exclude_ids = []
-        if artist and artist.reported_video_ids:
-            exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid]
+                if not artist:
+                    artist = Artist(name=artist_name)
+                    db_session.add(artist)
+                
+                artist.youtube_video_id = video_id
+                artist.youtube_updated_at = datetime.now()
+                artist.is_reported = False
+                
+                try:
+                    db_session.commit()
+                    status = f"動画あり: {video_id}" if video_id else "動画なし"
+                    print(f"[YouTube] {artist_name} → {status} (本日{youtube_fetch_count}件目)")
+                except Exception as db_err:
+                    db_session.rollback()
+                    print(f"[YouTube] Error updating artist {artist_name}: {db_err}")
+            else:
+                # 上限に達している場合はキャッシュがあれば古いものでも使い、なければNone
+                video_id = artist.youtube_video_id if artist else None
 
-        video_id = search_artist_video(artist_name, exclude_ids=exclude_ids)
-        youtube_fetch_count += 1
+        artist_list.append({"name": artist_name, "youtube_id": video_id})
 
-        if not artist:
-            artist = Artist(name=artist_name)
-            db_session.add(artist)
-
-        artist.youtube_video_id = video_id
-        artist.youtube_updated_at = datetime.now()
-        artist.is_reported = False
-
-        status = f"動画あり: {video_id}" if video_id else "動画なし"
-        print(f"[YouTube] {artist_name} → {status} (本日{youtube_fetch_count}件目)")
-
-    db_session.commit()
-    return youtube_fetch_count
+    return artist_list, youtube_fetch_count
 
 
 async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, target_dates: list, db_session, youtube_fetch_count: int) -> int:
@@ -86,12 +93,21 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
         print(f"[{venue_name}] No events found or page structure mismatch.")
         return youtube_fetch_count
     
-    livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
-    if not livehouse:
-        # This shouldn't happen if areas were seeded
-        livehouse = LiveHouse(name=venue_name, area="Unknown", latitude=0, longitude=0, url=f"https://www.loft-prj.co.jp/{venue_slug}/")
-        db_session.add(livehouse)
-        db_session.commit()
+    try:
+        livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
+        if not livehouse:
+            # This shouldn't happen if areas were seeded
+            livehouse = LiveHouse(name=venue_name, area="Unknown", latitude=0, longitude=0, url=f"https://www.loft-prj.co.jp/{venue_slug}/")
+            db_session.add(livehouse)
+            db_session.commit()
+            # Re-fetch to get ID
+            livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
+        
+        livehouse_id = livehouse.id # Capture ID to avoid lazy loading later
+    except Exception as e:
+        db_session.rollback()
+        print(f"[{venue_name}] Error initializing livehouse: {e}")
+        return youtube_fetch_count
 
     # Find all event links on the schedule page
     event_links = await page.query_selector_all('a.js-cursor-elm')
@@ -211,40 +227,62 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                 except:
                     pass
 
-            # Check if event already exists
-            existing_event = db_session.query(Event).filter(
-                Event.livehouse_id == livehouse.id, Event.date == found_date.date(), Event.title == title
-            ).first()
-            
-            if not existing_event:
-                new_event = Event(
-                    livehouse_id=livehouse.id,
-                    date=found_date.date(),
-                    title=title,
-                    performers=performers_str,
-                    open_time=open_time,
-                    start_time=start_time,
-                    price_info=sanitize_price_info(price_info),
-                    ticket_url=ticket_url,
-                    is_midnight=is_midnight
-                )
-                db_session.add(new_event)
-                db_session.commit()
-                print(f"[{venue_name}] Added new event: {title} (Midnight: {is_midnight})")
-            else:
-                # Update is_midnight even for existing events if needed
-                if existing_event.is_midnight != is_midnight:
-                    existing_event.is_midnight = is_midnight
+            try:
+                # Ensure session is clean for a new event
+                db_session.rollback() 
+
+                # Check if event already exists using ID variable
+                existing_event = db_session.query(Event).filter(
+                    Event.livehouse_id == livehouse_id, Event.date == found_date.date(), Event.title == title
+                ).first()
+
+                if not existing_event:
+                    # Create initial event record
+                    existing_event = Event(
+                        livehouse_id=livehouse.id,
+                        date=found_date.date(),
+                        title=title,
+                        performers=performers_str,
+                        open_time=open_time,
+                        start_time=start_time,
+                        price_info=sanitize_price_info(price_info),
+                        ticket_url=ticket_url,
+                        is_midnight=is_midnight
+                    )
+                    db_session.add(existing_event)
                     db_session.commit()
-                    print(f"[{venue_name}] Updated existing event is_midnight flag: {title}")
+                    print(f"[{venue_name}] Added new event: {title}")
                 else:
-                    print(f"[{venue_name}] Skipping existing event: {title}")
-            
-            youtube_fetch_count = fetch_youtube_for_new_artists(
-                db_session, performers_str, youtube_fetch_count
-            )
-        except Exception as detail_err:
-            print(f"Error scraping detail page {href}: {detail_err}")
+                    # Update basic info
+                    if existing_event.is_midnight != is_midnight:
+                        existing_event.is_midnight = is_midnight
+                        db_session.commit()
+                        print(f"[{venue_name}] Updated tag: {title}")
+
+                # External API call (YouTube)
+                artists_data, youtube_fetch_count = get_artist_video_info(
+                    db_session, performers_str, youtube_fetch_count
+                )
+
+                # Re-fetch event using ID variable
+                existing_event = db_session.query(Event).filter(
+                    Event.livehouse_id == livehouse_id, Event.date == found_date.date(), Event.title == title
+                ).first()
+
+                if existing_event and existing_event.artists_data != artists_data:
+                    existing_event.artists_data = artists_data
+                    db_session.commit()
+                    print(f"[{venue_name}] Updated performers data: {title}")
+                else:
+                    print(f"[{venue_name}] Checked: {title}")
+
+            except Exception as e:
+                db_session.rollback()
+                print(f"[{venue_name}] Error processing event {title}: {e}")
+                continue
+        except Exception as outer_e:
+            db_session.rollback()
+            print(f"[{venue_name}] Outer error scraping detail page {href}: {outer_e}")
         finally:
             await detail_page.close()
 
@@ -252,7 +290,6 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
 
 
 async def async_run_all_scrapers():
-    db = SessionLocal()
     # Handle JST time (+9h from UTC)
     now_jst = datetime.utcnow() + timedelta(hours=9)
     today = now_jst
@@ -266,21 +303,28 @@ async def async_run_all_scrapers():
         page = await browser.new_page()
         
         # 1. Shinjuku LOFT
+        db_loft = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_loft_project_venue(page, "新宿LOFT", "loft", target_dates, db, youtube_fetch_count)
+            youtube_fetch_count = await scrape_loft_project_venue(page, "新宿LOFT", "loft", target_dates, db_loft, youtube_fetch_count)
         except Exception as e:
+            db_loft.rollback()
             print(f"Error scraping Shinjuku LOFT: {e}")
+        finally:
+            db_loft.close()
 
         # 2. Shimokitazawa SHELTER
+        db_shelter = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_loft_project_venue(page, "下北沢SHELTER", "shelter", target_dates, db, youtube_fetch_count)
+            youtube_fetch_count = await scrape_loft_project_venue(page, "下北沢SHELTER", "shelter", target_dates, db_shelter, youtube_fetch_count)
         except Exception as e:
+            db_shelter.rollback()
             print(f"Error scraping Shimokitazawa SHELTER: {e}")
+        finally:
+            db_shelter.close()
                 
         await browser.close()
 
     print(f"\n[完了] 本日のYouTube取得数: {youtube_fetch_count}件 / 上限{DAILY_FETCH_LIMIT}件")
-    db.close()
 
 def run_all_scrapers():
     """Wrapper to run the async scraper synchronously."""
