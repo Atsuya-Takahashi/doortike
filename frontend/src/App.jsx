@@ -237,7 +237,7 @@ function App() {
         }
 
         if (selectedPrefecture !== 'All') {
-          query = query.eq('livehouses.prefecture', selectedPrefecture)
+          query = query.eq('livehouse.prefecture', selectedPrefecture)
         }
         // Area filtering is handled entirely on the client side (filteredEvents useMemo)
         // to prevent loading flickers when switching areas.
@@ -527,316 +527,279 @@ function App() {
     }
   }
 
-  const renderEventCard = (evt) => (
-    <div className={`glass-panel event-card ${evt.pr_type ? 'pr-card' : ''}`} key={evt.id} style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch', padding: '16px' }}>
-        <div className="event-card-image-container">
-          {evt.image_url ? (
-            <img src={evt.image_url} alt={evt.title} className="event-card-image" />
-          ) : (
-            <div className="no-image-placeholder">NO IMAGE</div>
-          )}
-        </div>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <div className="event-header">
-            <div className="venue-info">
-              <div className="venue-name-row" style={{ flexWrap: 'wrap', rowGap: '4px', alignItems: 'center' }}>
-                <MapPin size={15} style={{ flexShrink: 0, color: 'var(--accent-color)', marginRight: '2px' }} />
-                {evt.venues && evt.venues.length > 1 ? (
-                  evt.venues.map((venue, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
-                      {idx > 0 && <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 4px' }}>/</span>}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="venue-link"
-                          style={{ lineHeight: 1, paddingBottom: '1px', fontWeight: 700, fontSize: '0.85rem' }}
-                        >
-                          {venue.name}
-                        </a>
-                        <div style={{ display: 'flex', alignItems: 'center', transform: 'translateY(-2px)' }}>
-                          <button
-                            className={`icon-btn-small ${likedVenues.includes(venue.id) ? 'active' : ''}`}
-                            onClick={(e) => { e.stopPropagation(); toggleVenueLike(venue.id); }}
-                            title="お気に入りライブハウスに追加"
+  const renderEventCard = (evt) => {
+    if (!evt || !evt.livehouse) return null;
+    return (
+      <div className={`glass-panel event-card ${evt.pr_type ? 'pr-card' : ''}`} key={evt.id} style={{ display: 'flex', flexDirection: 'row', overflow: 'hidden', padding: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: '16px 15px' }}>
+            <div className="event-header">
+              <div className="venue-info">
+                <div className="venue-name-row" style={{ flexWrap: 'wrap', rowGap: '4px', alignItems: 'center' }}>
+                  <MapPin size={15} style={{ flexShrink: 0, color: 'var(--accent-color)', marginRight: '2px' }} />
+                  {evt.venues && evt.venues.length > 1 ? (
+                    evt.venues.map((venue, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
+                        {idx > 0 && <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 4px' }}>/</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="venue-link"
+                            style={{ lineHeight: 1, paddingBottom: '1px', fontWeight: 700, fontSize: '0.85rem' }}
                           >
-                            <Heart fill={likedVenues.includes(venue.id) ? "var(--accent-color)" : "none"} size={16} />
-                          </button>
+                            {venue.name}
+                          </a>
+                          <div style={{ display: 'flex', alignItems: 'center', transform: 'translateY(-2px)' }}>
+                            <button
+                              className={`icon-btn-small ${likedVenues.includes(venue.id) ? 'active' : ''}`}
+                              onClick={(e) => { e.stopPropagation(); toggleVenueLike(venue.id); }}
+                              title="お気に入りライブハウスに追加"
+                            >
+                              <Heart fill={likedVenues.includes(venue.id) ? "var(--accent-color)" : "none"} size={16} />
+                            </button>
+                          </div>
                         </div>
                       </div>
+                    ))
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.livehouse.name)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="venue-link"
+                        style={{ lineHeight: 1, paddingBottom: '1px', fontWeight: 700, fontSize: '0.85rem' }}
+                      >
+                        {evt.livehouse.name}
+                      </a>
+                      <div style={{ display: 'flex', alignItems: 'center', marginLeft: '4px', transform: 'translateY(-2px)' }}>
+                        <button
+                          className={`icon-btn-small ${likedVenues.includes(evt.livehouse.id) ? 'active' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); toggleVenueLike(evt.livehouse.id); }}
+                          title="お気に入りライブハウスに追加"
+                        >
+                          <Heart fill={likedVenues.includes(evt.livehouse.id) ? "var(--accent-color)" : "none"} size={16} />
+                        </button>
+                      </div>
                     </div>
-                  ))
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <h3 className="event-title">
+              <a
+                href={evt.ticket_url || `https://www.google.com/search?q=${encodeURIComponent(`${evt.livehouse.name} ${evt.title} チケット`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="event-link"
+                title={evt.ticket_url ? "チケット購入（外部サイト）" : "チケットを検索（Google）"}
+              >
+                {evt.title}
+              </a>
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '4px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Clock size={12} style={{ flexShrink: 0, color: 'var(--accent-color)' }} />
+                <span>OPEN {evt.open_time} / START {evt.start_time}</span>
+              </div>
+              {evt.price_info && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+                  <Ticket size={12} style={{ flexShrink: 0, marginTop: '1px', color: 'var(--accent-color)' }} />
+                  <span style={{ whiteSpace: 'pre-wrap', lineHeight: '1.3' }}>{evt.price_info}</span>
+                </div>
+              )}
+            </div>
+
+            <p className="event-performers">
+              {(() => {
+                const infoList = evt.artists_data && evt.artists_data.length > 0
+                  ? evt.artists_data.map(item => ({ 
+                      name: item.name, 
+                      youtube_id: item.youtube_id 
+                    }))
+                  : (evt.performers
+                    ? evt.performers.split(/[、,／/\n]\s*/).filter(p => p.trim()).map(p => ({ name: p.trim(), youtube_id: null }))
+                    : []);
+
+                return infoList.map((perfInfo, index) => (
+                  <span key={index}>
+                    {perfInfo.youtube_id ? (
+                      <span
+                        className="performer-link"
+                        onClick={() => {
+                          setVideoModal({ 
+                            artistName: perfInfo.name, 
+                            loading: false, 
+                            videoId: perfInfo.youtube_id, 
+                            reported: reportedVideos.includes(perfInfo.name), 
+                            eventId: evt.id,
+                            ticketUrl: evt.ticket_url || null 
+                          });
+                        }}
+                      >
+                        {perfInfo.name}
+                      </span>
+                    ) : (
+                      <span className="performer-name">{perfInfo.name}</span>
+                    )}
+                    {index < infoList.length - 1 ? <span style={{ margin: '0 6px', color: 'var(--text-secondary)' }}>/</span> : ''}
+                  </span>
+                ));
+              })()}
+            </p>
+
+            <div className="action-buttons" style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {evt.livehouse.drink_fee && (
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '2px 8px',
+                  background: 'var(--control-bg)',
+                  color: 'var(--text-secondary)',
+                  borderRadius: '12px',
+                  fontSize: '0.7rem',
+                  fontWeight: '500',
+                  border: '1px solid var(--control-border)',
+                  marginRight: 'auto'
+                }}>
+                  <span style={{ fontSize: '0.65rem', marginRight: '3px' }}>🥤</span>1D ¥{evt.livehouse.drink_fee}
+                </span>
+              )}
+
+              {(evt.livehouse.blog_url || evt.coupon_url) && (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: evt.livehouse.drink_fee ? '0' : 'auto' }}>
+                  {evt.livehouse.blog_url && (
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.livehouse.name)}`}
+                      href={evt.livehouse.blog_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="venue-link"
-                      style={{ lineHeight: 1, paddingBottom: '1px', fontWeight: 700, fontSize: '0.85rem' }}
-                    >
-                      {evt.livehouse.name}
-                    </a>
-                    <div style={{ display: 'flex', alignItems: 'center', marginLeft: '4px', transform: 'translateY(-2px)' }}>
-                      <button
-                        className={`icon-btn-small ${likedVenues.includes(evt.livehouse.id) ? 'active' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); toggleVenueLike(evt.livehouse.id); }}
-                        title="お気に入りライブハウスに追加"
-                      >
-                        <Heart fill={likedVenues.includes(evt.livehouse.id) ? "var(--accent-color)" : "none"} size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <h3 className="event-title">
-            <a
-              href={evt.ticket_url || `https://www.google.com/search?q=${encodeURIComponent(`${evt.livehouse.name} ${evt.title} チケット`)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="event-link"
-              title={evt.ticket_url ? "チケット購入（外部サイト）" : "チケットを検索（Google）"}
-            >
-              {evt.title}
-            </a>
-          </h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '4px', marginBottom: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Clock size={12} style={{ flexShrink: 0, color: 'var(--accent-color)' }} />
-              <span>OPEN {evt.open_time} / START {evt.start_time}</span>
-            </div>
-            {evt.price_info && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
-                <Ticket size={12} style={{ flexShrink: 0, marginTop: '1px', color: 'var(--accent-color)' }} />
-                <span style={{ whiteSpace: 'pre-wrap', lineHeight: '1.3' }}>{evt.price_info}</span>
-              </div>
-            )}
-          </div>
-
-          <p className="event-performers">
-            {(() => {
-              // artists_data (JSONB) があれば優先的に使う
-              const infoList = evt.artists_data && evt.artists_data.length > 0
-                ? evt.artists_data.map(item => ({ 
-                    name: item.name, 
-                    youtube_id: item.youtube_id 
-                  }))
-                : (evt.performers
-                  ? evt.performers.split(/[、,／/\n]\s*/).filter(p => p.trim()).map(p => ({ name: p.trim(), youtube_id: null }))
-                  : []);
-
-              return infoList.map((perfInfo, index) => (
-                <span key={index}>
-                  {perfInfo.youtube_id ? (
-                    <span
-                      className="performer-link"
-                      onClick={() => {
-                        setVideoModal({ 
-                          artistName: perfInfo.name, 
-                          loading: false, 
-                          videoId: perfInfo.youtube_id, 
-                          reported: reportedVideos.includes(perfInfo.name), 
-                          eventId: evt.id,
-                          ticketUrl: evt.ticket_url || null 
-                        });
+                      className="icon-btn"
+                      title="関連ブログ記事を読む"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--text-secondary)',
+                        textDecoration: 'none',
+                        padding: '0',
+                        width: '36px',
+                        height: '36px',
+                        background: 'rgba(var(--text-secondary-rgb), 0.05)',
+                        borderRadius: '50%',
+                        border: '1px solid var(--control-border)',
+                        transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                        position: 'relative'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.background = 'rgba(var(--text-secondary-rgb), 0.1)';
+                        e.currentTarget.style.transform = 'scale(1.15)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = 'rgba(var(--text-secondary-rgb), 0.05)';
+                        e.currentTarget.style.transform = 'scale(1)';
                       }}
                     >
-                      {perfInfo.name}
-                    </span>
-                  ) : (
-                    <span className="performer-name">{perfInfo.name}</span>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <BookOpen size={20} />
+                        <ExternalLink size={10} style={{ position: 'absolute', top: '-6px', right: '-8px' }} />
+                      </div>
+                    </a>
                   )}
-                  {index < infoList.length - 1 ? <span style={{ margin: '0 6px', color: 'var(--text-secondary)' }}>/</span> : ''}
-                </span>
-              ));
-            })()}
-          </p>
-
-          <div className="action-buttons" style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {evt.livehouse.drink_fee && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '2px 8px',
-                background: 'var(--control-bg)',
-                color: 'var(--text-secondary)',
-                borderRadius: '12px',
-                fontSize: '0.7rem',
-                fontWeight: '500',
-                border: '1px solid var(--control-border)',
-                marginRight: 'auto'
-              }}>
-                <span style={{ fontSize: '0.65rem', marginRight: '3px' }}>🥤</span>1D ¥{evt.livehouse.drink_fee}
-              </span>
-            )}
-
-            {(evt.livehouse.blog_url || evt.coupon_url) && (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: evt.livehouse.drink_fee ? '0' : 'auto' }}>
-                {evt.livehouse.blog_url && (
-                  <a
-                    href={evt.livehouse.blog_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="icon-btn"
-                    title="関連ブログ記事を読む"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--text-secondary)',
-                      textDecoration: 'none',
-                      padding: '0',
-                      width: '36px',
-                      height: '36px',
-                      background: 'rgba(var(--text-secondary-rgb), 0.05)',
-                      borderRadius: '50%',
-                      border: '1px solid var(--control-border)',
-                      transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                      position: 'relative'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = 'rgba(var(--text-secondary-rgb), 0.1)';
-                      e.currentTarget.style.transform = 'scale(1.15)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.background = 'rgba(var(--text-secondary-rgb), 0.05)';
-                      e.currentTarget.style.transform = 'scale(1)';
-                    }}
-                  >
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <BookOpen size={20} />
-                      <ExternalLink size={10} style={{ position: 'absolute', top: '-6px', right: '-8px' }} />
-                    </div>
-                  </a>
-                )}
-                {evt.coupon_url && (
-                  <button
-                    onClick={(e) => handleCouponClick(e, evt)}
-                    className="icon-btn"
-                    title={userPassType ? "ドアチケパスを表示" : "お得なパスポートを見る"}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: userPassType ? 'var(--accent-color)' : 'var(--text-secondary)',
-                      textDecoration: 'none',
-                      padding: '0',
-                      width: '36px',
-                      height: '36px',
-                      background: userPassType ? 'rgba(255, 51, 102, 0.08)' : 'rgba(var(--text-secondary-rgb), 0.05)',
-                      borderRadius: '50%',
-                      border: userPassType ? '1px solid var(--accent-color)' : '1px solid var(--control-border)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                      position: 'relative'
-                    }}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.background = userPassType ? 'rgba(255, 51, 102, 0.12)' : 'rgba(var(--text-secondary-rgb), 0.1)';
-                      e.currentTarget.style.transform = 'scale(1.15)';
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.background = userPassType ? 'rgba(255, 51, 102, 0.08)' : 'rgba(var(--text-secondary-rgb), 0.05)';
-                      e.currentTarget.style.transform = 'scale(1)';
-                    }}
-                  >
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Ticket size={20} />
-                    </div>
-                  </button>
-                )}
-              </div>
-            )}
+                  {evt.coupon_url && (
+                    <button
+                      onClick={(e) => handleCouponClick(e, evt)}
+                      className="icon-btn"
+                      title={userPassType ? "ドアチケパスを表示" : "お得なパスポートを見る"}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: userPassType ? 'var(--accent-color)' : 'var(--text-secondary)',
+                        textDecoration: 'none',
+                        padding: '0',
+                        width: '36px',
+                        height: '36px',
+                        background: userPassType ? 'rgba(255, 51, 102, 0.08)' : 'rgba(var(--text-secondary-rgb), 0.05)',
+                        borderRadius: '50%',
+                        border: userPassType ? '1px solid var(--accent-color)' : '1px solid var(--control-border)',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                        position: 'relative'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.background = userPassType ? 'rgba(255, 51, 102, 0.12)' : 'rgba(var(--text-secondary-rgb), 0.1)';
+                        e.currentTarget.style.transform = 'scale(1.15)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = userPassType ? 'rgba(255, 51, 102, 0.08)' : 'rgba(var(--text-secondary-rgb), 0.05)';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Ticket size={20} />
+                      </div>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div style={{
-          width: '130px',
-          flexShrink: 0,
-          margin: '-12px -15px -12px 0',
-          borderRadius: '0 20px 20px 0',
-          overflow: 'hidden',
-          backgroundColor: 'var(--control-bg)',
-          position: 'relative'
-        }}>
-          <img
-            src={evt.image_url || `https://picsum.photos/seed/${evt.id + 100}/150/150`}
-            alt="Thumbnail"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            loading="lazy"
-          />
-          <button
-            onClick={(e) => { e.stopPropagation(); toggleBookmark(evt); }}
-            title="気になるイベントに保存"
-            style={{
-              position: 'absolute',
-              top: '12px',
-              right: '12px',
-              padding: '8px',
-              background: 'rgba(255, 255, 255, 0.85)',
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              borderRadius: '50%',
-              border: '1px solid rgba(255,255,255,1)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s',
-              cursor: 'pointer'
-            }}
-            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-          >
-            <Bookmark fill={isEventBookmarked(evt.id) ? "var(--accent-color)" : "none"} color={isEventBookmarked(evt.id) ? "var(--accent-color)" : "#475569"} size={18} />
-          </button>
-        </div>
+          <div style={{
+            width: '120px',
+            flexShrink: 0,
+            borderRadius: '0',
+            overflow: 'hidden',
+            backgroundColor: 'var(--control-bg)',
+            position: 'relative'
+          }}>
+            {evt.image_url ? (
+              <img
+                src={evt.image_url}
+                alt="Thumbnail"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                loading="lazy"
+              />
+            ) : (
+              <div className="no-image-placeholder">NO IMAGE</div>
+            )}
+            
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleBookmark(evt); }}
+              title="気になるイベントに保存"
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                padding: '8px',
+                background: 'rgba(255, 255, 255, 0.85)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                borderRadius: '50%',
+                border: '1px solid rgba(255,255,255,1)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s',
+                cursor: 'pointer'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <Bookmark fill={isEventBookmarked(evt.id) ? "var(--accent-color)" : "none"} color={isEventBookmarked(evt.id) ? "var(--accent-color)" : "#475569"} size={18} />
+            </button>
+          </div>
       </div>
-      {/* PR/PICKUP Badges - Bottom-right for high visibility and regulatory compliance */}
-      {evt.is_pr && (
-        <div style={{
-          position: 'absolute',
-          bottom: '12px',
-          right: '-8px',
-          background: 'var(--accent-color)',
-          color: 'white',
-          padding: '4px 10px',
-          borderRadius: '4px',
-          fontSize: '0.75rem',
-          fontWeight: '900',
-          boxShadow: '0 4px 12px rgba(255, 51, 102, 0.3)',
-          zIndex: 5,
-          pointerEvents: 'none'
-        }}>[{evt.livehouse.prefecture}] {evt.pr_type === 'fan_support' ? 'Fan Support' : 'FEATURED'} (PR)</div>
-      )}
-      {!evt.is_pr && evt.is_pickup && (
-        <div style={{
-          position: 'absolute',
-          bottom: '12px',
-          right: '-8px',
-          background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
-          color: 'white',
-          padding: '4px 10px',
-          borderRadius: '4px',
-          fontSize: '0.7rem',
-          fontWeight: '800',
-          boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-          zIndex: 5,
-          pointerEvents: 'none',
-          letterSpacing: '0.5px'
-        }}>STAFF PICK</div>
-      )}
-    </div>
-  )
+    );
+  };
 
   // Handle late-night events: if it's before 4 AM, "today" should be the previous calendar day.
   const now = new Date()

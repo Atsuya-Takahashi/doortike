@@ -26,6 +26,9 @@ def search_artist_video(artist_name: str, exclude_ids: List[str] = [], suffix: s
         return None
 
     try:
+        from datetime import datetime, timedelta
+        one_year_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
         youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
         
         # 指定されたサフィックスで検索（より多くの候補を取得して除外に対応）
@@ -35,6 +38,7 @@ def search_artist_video(artist_name: str, exclude_ids: List[str] = [], suffix: s
             type="video",
             maxResults=10,
             videoEmbeddable="true",
+            publishedAfter=one_year_ago
         )
         response = request.execute()
         items = response.get("items", [])

@@ -274,7 +274,7 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                 ticket_link_elem = await detail_page.query_selector(t_selector)
                 if ticket_link_elem:
                     t_href = await ticket_link_elem.get_attribute('href')
-                    if t_href and any(domain in t_href for domain in ['eplus.jp', 't.pia.jp', 'l-tike.com', 'tiget.net', 't.livepocket.jp']):
+                    if t_href and any(domain in t_href for domain in ['eplus.jp', 't.pia.jp', 'l-tike.com', 'tiget.net', 't.livepocket.jp', 't-dv.com']):
                         ticket_url = t_href
                         break
 
