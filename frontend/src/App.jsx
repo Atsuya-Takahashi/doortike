@@ -529,7 +529,14 @@ function App() {
 
   const renderEventCard = (evt) => (
     <div className={`glass-panel event-card ${evt.pr_type ? 'pr-card' : ''}`} key={evt.id} style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+      <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch', padding: '16px' }}>
+        <div className="event-card-image-container">
+          {evt.image_url ? (
+            <img src={evt.image_url} alt={evt.title} className="event-card-image" />
+          ) : (
+            <div className="no-image-placeholder">NO IMAGE</div>
+          )}
+        </div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <div className="event-header">
             <div className="venue-info">

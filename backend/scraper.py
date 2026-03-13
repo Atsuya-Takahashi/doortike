@@ -1,10 +1,20 @@
+from typing import Optional, List, Dict
 import asyncio
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
-from models import SessionLocal, LiveHouse, Event, Artist, VideoReport
-from youtube_service import search_artist_video
+try:
+    from models import SessionLocal, LiveHouse, Event, Artist, VideoReport
+    from youtube_service import search_artist_video
+except ImportError:
+    # Handle direct execution vs module execution context
+    import sys
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from models import SessionLocal, LiveHouse, Event, Artist, VideoReport
+    from youtube_service import search_artist_video
 import re
 import os
+import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,8 +33,40 @@ def sanitize_price_info(text):
 # 1回のスクレイパー実行で呼べるYouTube APIの上限（100ユニット×90=9,000ユニット/日）
 DAILY_FETCH_LIMIT = 90
 
+def fetch_og_image(url):
+    """
+    Fetch OGP image from a URL.
+    """
+    if not url: return None
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Try og:image first
+        og_image = soup.find('meta', property='og:image') or soup.find('meta', attrs={'name': 'og:image'})
+        if og_image and og_image.get('content'):
+            img_url = og_image.get('content')
+            # Handle relative URLs
+            if img_url.startswith('//'):
+                img_url = 'https:' + img_url
+            elif img_url.startswith('/'):
+                from urllib.parse import urljoin
+                img_url = urljoin(url, img_url)
+            return img_url
+            
+        # Fallback to twitter:image
+        twitter_image = soup.find('meta', name='twitter:image') or soup.find('meta', attrs={'property': 'twitter:image'})
+        if twitter_image and twitter_image.get('content'):
+            return twitter_image.get('content')
+            
+    except Exception as e:
+        print(f"[OGP] Error fetching {url}: {e}")
+    return None
 
-def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int, pending_reports: dict = None) -> tuple[list, int]:
+
+def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int, pending_reports: Optional[Dict] = None) -> tuple[list, int]:
     """
     performers文字列を分割し、アーティスト名とYouTube IDのリストを返す。
     必要に応じて外部APIを叩き、キャッシュ（artistsテーブル）も更新する。
@@ -107,16 +149,14 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
     return artist_list, youtube_fetch_count
 
 
-async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, target_dates: list, db_session, youtube_fetch_count: int, pending_reports: dict = None) -> int:
+async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, target_dates: list, db_session, youtube_fetch_count: int, pending_reports: Optional[Dict] = None) -> int:
     """
     Generic scraper for LOFT PROJECT venues (LOFT, SHELTER, etc.)
     """
-    # Use the general schedule page to find events
     base_url = f"https://www.loft-prj.co.jp/schedule/{venue_slug}/schedule"
     print(f"Scraping {venue_name} at {base_url}")
     
     await page.goto(base_url)
-    # Wait for the content to be loaded
     try:
         await page.wait_for_selector('a.js-cursor-elm', timeout=10000)
     except:
@@ -126,22 +166,17 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
     try:
         livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
         if not livehouse:
-            # This shouldn't happen if areas were seeded
             livehouse = LiveHouse(name=venue_name, area="Unknown", latitude=0, longitude=0, url=f"https://www.loft-prj.co.jp/{venue_slug}/")
             db_session.add(livehouse)
             db_session.commit()
-            # Re-fetch to get ID
             livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
-        
-        livehouse_id = livehouse.id # Capture ID to avoid lazy loading later
+        livehouse_id = livehouse.id
     except Exception as e:
         db_session.rollback()
         print(f"[{venue_name}] Error initializing livehouse: {e}")
         return youtube_fetch_count
 
-    # Find all event links on the schedule page
     event_links = await page.query_selector_all('a.js-cursor-elm')
-    
     processed_hrefs = set()
     
     for link in event_links:
@@ -149,7 +184,6 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
         if not href or href in processed_hrefs: continue
         processed_hrefs.add(href)
         
-        # Date is inside <time> element as separate divs
         time_elem = await link.query_selector('time')
         if not time_elem: continue
         
@@ -160,12 +194,19 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
             year_str = await time_divs[0].inner_text()
             month_str = await time_divs[1].inner_text()
             day_str = await time_divs[2].inner_text()
-            
             event_date_str = f"{year_str.strip()}-{month_str.strip()}-{day_str.strip()}"
             event_date = datetime.strptime(event_date_str, "%Y-%m-%d")
         except Exception as e:
             print(f"[{venue_name}] Failed to parse date: {e}")
             continue
+            
+        # Get Image from list page if available
+        image_url = None
+        fig_img = await link.query_selector('figure img')
+        if fig_img:
+            image_url = await fig_img.get_attribute('src')
+            if image_url and not image_url.startswith('http'):
+                image_url = f"https://www.loft-prj.co.jp{image_url}"
         
         found_date = None
         for target_date in target_dates:
@@ -175,15 +216,14 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
         
         if not found_date: continue
         
-        print(f"[{venue_name}] Found event for {found_date.date()}: {href}")
+        print(f"[{venue_name}] Processing event for {found_date.date()}: {href}")
         
-        # Go to detail page in the same page object to avoid context issues
         detail_page = await page.context.browser.new_page()
         try:
             await detail_page.goto(href)
             await detail_page.wait_for_load_state("networkidle")
             
-            # Robust Title extraction
+            # Title extraction
             title = "Unknown Title"
             for selector in ['h1.c_title span', 'h1.c_title', 'h1.mainTitle', 'h1']:
                 title_elem = await detail_page.query_selector(selector)
@@ -193,18 +233,13 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                         title = title_text.strip()
                         break
             
-            # Robust Performers extraction
+            # Performers extraction
             performers_str = ""
-            # Try list first
             performers_elems = await detail_page.query_selector_all('.actList li')
             if performers_elems:
-                performers = []
-                for p_elem in performers_elems:
-                    p_text = await p_elem.inner_text()
-                    if p_text.strip(): performers.append(p_text.strip())
+                performers = [ (await p.inner_text()).strip() for p in performers_elems if (await p.inner_text()).strip() ]
                 performers_str = ", ".join(performers)
             
-            # Fallback to .entry p (found by subagent recently)
             if not performers_str:
                 for p_selector in ['.entry p span strong', '.entry p', '.entry']:
                     entry_elem = await detail_page.query_selector(p_selector)
@@ -214,28 +249,26 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                             performers_str = p_text.replace("ACT:", "").replace("出演:", "").strip()
                             break
             
-            time_elem = await detail_page.query_selector('.open')
-            if not time_elem:
-                time_elem = await detail_page.query_selector('.openStart')
-            if not time_elem:
-                time_elem = await detail_page.query_selector('.open-start')
+            # Time extraction
+            time_elem = await detail_page.query_selector('.open') or \
+                        await detail_page.query_selector('.openStart') or \
+                        await detail_page.query_selector('.open-start')
             
             time_text = await time_elem.inner_text() if time_elem else ""
             open_time, start_time = "", ""
             if time_text:
-                # Handle spaces and newlines between label and time
                 match_open = re.search(r'OPEN\s*(\d{2}:\d{2})', time_text, re.IGNORECASE)
                 if match_open: open_time = match_open.group(1)
                 match_start = re.search(r'START\s*(\d{2}:\d{2})', time_text, re.IGNORECASE)
                 if match_start: start_time = match_start.group(1)
                 
-            price_elem = await detail_page.query_selector('.ticket_detail_box')
-            if not price_elem:
-                price_elem = await detail_page.query_selector('.price')
-            if not price_elem:
-                price_elem = await detail_page.query_selector('.ticketWrap .price')
-            price_info = await price_elem.inner_text() if price_elem else ""
+            # Price info
+            price_elem = await detail_page.query_selector('.ticket_detail_box') or \
+                         await detail_page.query_selector('.price') or \
+                         await detail_page.query_selector('.ticketWrap .price')
+            price_info = sanitize_price_info(await price_elem.inner_text()) if price_elem else ""
             
+            # Ticket URL
             ticket_url = None
             for t_selector in ['.ticketList a', '.ticketWrap a', '.entry a']:
                 ticket_link_elem = await detail_page.query_selector(t_selector)
@@ -245,74 +278,69 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                         ticket_url = t_href
                         break
 
-            # Determine if it's a late-night event (is_midnight)
+            # OGP Fallback
+            if not image_url and ticket_url:
+                print(f"[{venue_name}] Fetching OGP image for {ticket_url}")
+                image_url = fetch_og_image(ticket_url)
+
+            # Late night check
             is_midnight = False
             time_to_check = start_time or open_time
             if time_to_check:
                 try:
-                    hour = int(time_to_check.split(":")[0])
-                    # 21:00 or later, or early morning (club events)
-                    if hour >= 21 or hour < 5:
+                    hour = int(time_to_check.split(':')[0])
+                    if hour >= 21 or hour < 4:
                         is_midnight = True
                 except:
                     pass
 
             try:
-                # Ensure session is clean for a new event
-                db_session.rollback() 
+                # Get artist/video data
+                artist_info_list, youtube_fetch_count = get_artist_video_info(
+                    db_session, performers_str, youtube_fetch_count, pending_reports
+                )
 
-                # Check if event already exists using ID variable
+                # Upsert event
                 existing_event = db_session.query(Event).filter(
-                    Event.livehouse_id == livehouse_id, Event.date == found_date.date(), Event.title == title
+                    Event.livehouse_id == livehouse_id,
+                    Event.date == found_date.date(),
+                    Event.title == title
                 ).first()
-
-                if not existing_event:
-                    # Create initial event record
-                    existing_event = Event(
-                        livehouse_id=livehouse.id,
+                
+                if existing_event:
+                    existing_event.performers = performers_str
+                    existing_event.open_time = open_time
+                    existing_event.start_time = start_time
+                    existing_event.price_info = price_info
+                    existing_event.ticket_url = ticket_url
+                    existing_event.is_midnight = is_midnight
+                    existing_event.artists_data = artist_info_list
+                    existing_event.image_url = image_url
+                    print(f"[{venue_name}] Updated: {title}")
+                else:
+                    new_event = Event(
+                        livehouse_id=livehouse_id,
                         date=found_date.date(),
                         title=title,
                         performers=performers_str,
                         open_time=open_time,
                         start_time=start_time,
-                        price_info=sanitize_price_info(price_info),
+                        price_info=price_info,
                         ticket_url=ticket_url,
-                        is_midnight=is_midnight
+                        is_midnight=is_midnight,
+                        artists_data=artist_info_list,
+                        image_url=image_url
                     )
-                    db_session.add(existing_event)
-                    db_session.commit()
-                    print(f"[{venue_name}] Added new event: {title}")
-                else:
-                    # Update basic info
-                    if existing_event.is_midnight != is_midnight:
-                        existing_event.is_midnight = is_midnight
-                        db_session.commit()
-                        print(f"[{venue_name}] Updated tag: {title}")
-
-                # External API call (YouTube)
-                artists_data, youtube_fetch_count = get_artist_video_info(
-                    db_session, performers_str, youtube_fetch_count, pending_reports
-                )
-
-                # Re-fetch event using ID variable
-                existing_event = db_session.query(Event).filter(
-                    Event.livehouse_id == livehouse_id, Event.date == found_date.date(), Event.title == title
-                ).first()
-
-                if existing_event and existing_event.artists_data != artists_data:
-                    existing_event.artists_data = artists_data
-                    db_session.commit()
-                    print(f"[{venue_name}] Updated performers data: {title}")
-                else:
-                    print(f"[{venue_name}] Checked: {title}")
+                    db_session.add(new_event)
+                    print(f"[{venue_name}] Added: {title}")
+                
+                db_session.commit()
 
             except Exception as e:
                 db_session.rollback()
-                print(f"[{venue_name}] Error processing event {title}: {e}")
-                continue
+                print(f"[{venue_name}] DB Error for {title}: {e}")
         except Exception as outer_e:
-            db_session.rollback()
-            print(f"[{venue_name}] Outer error scraping detail page {href}: {outer_e}")
+            print(f"[{venue_name}] Error processing details for {href}: {outer_e}")
         finally:
             await detail_page.close()
 
@@ -365,6 +393,36 @@ async def async_run_all_scrapers():
             print(f"Error scraping Shimokitazawa SHELTER: {e}")
         finally:
             db_shelter.close()
+
+        # 3. LOFT9 Shibuya
+        db_loft9 = SessionLocal()
+        try:
+            youtube_fetch_count = await scrape_loft_project_venue(page, "LOFT9 Shibuya", "loft9", target_dates, db_loft9, youtube_fetch_count, pending_reports)
+        except Exception as e:
+            db_loft9.rollback()
+            print(f"Error scraping LOFT9 Shibuya: {e}")
+        finally:
+            db_loft9.close()
+
+        # 4. LOFT HEAVEN (Shibuya)
+        db_heaven = SessionLocal()
+        try:
+            youtube_fetch_count = await scrape_loft_project_venue(page, "LOFT HEAVEN", "heaven", target_dates, db_heaven, youtube_fetch_count, pending_reports)
+        except Exception as e:
+            db_heaven.rollback()
+            print(f"Error scraping LOFT HEAVEN: {e}")
+        finally:
+            db_heaven.close()
+
+        # 5. Flowers LOFT (Shimokitazawa)
+        db_flowers = SessionLocal()
+        try:
+            youtube_fetch_count = await scrape_loft_project_venue(page, "Flowers LOFT", "flowersloft", target_dates, db_flowers, youtube_fetch_count, pending_reports)
+        except Exception as e:
+            db_flowers.rollback()
+            print(f"Error scraping Flowers LOFT: {e}")
+        finally:
+            db_flowers.close()
                 
         await browser.close()
 

@@ -90,3 +90,40 @@ button:focus {
   transform: var(--card-hover-translate);
   box-shadow: 0 8px 25px 0 rgba(0, 0, 0, 0.12);
 }
+
+/* New Event Card Image Styles */
+.event-card-image-container {
+  width: 100px;
+  height: 100px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid var(--glass-border);
+  background: var(--control-bg);
+}
+
+.event-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.event-card:hover .event-card-image {
+  transform: scale(1.05);
+}
+
+.no-image-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--control-bg);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 8px;
+  opacity: 0.6;
+}

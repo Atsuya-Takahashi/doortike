@@ -53,6 +53,7 @@ class Event(Base):
     is_pickup = Column(Boolean, default=False)
     is_midnight = Column(Boolean, default=False)
     artists_data = Column(JSON, nullable=True)  # Store list of performers with their youtube_id: [{"name": "...", "youtube_id": "..."}]
+    image_url = Column(String, nullable=True)
     
     livehouse = relationship("LiveHouse", back_populates="events")
     reports = relationship("VideoReport", back_populates="event")
