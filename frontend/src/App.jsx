@@ -605,7 +605,7 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '4px', marginBottom: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <Clock size={12} style={{ flexShrink: 0, color: 'var(--accent-color)' }} />
-              <span>{evt.open_time} OPEN / {evt.start_time} START</span>
+              <span>OPEN {evt.open_time} / START {evt.start_time}</span>
             </div>
             {evt.price_info && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
