@@ -25,7 +25,7 @@ function App() {
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false)
   const [isPassModalOpen, setIsPassModalOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const [isAboutModalOpen, setIsAboutModalOpen] = useState(true)
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false)
   const [showOnlyLiked, setShowOnlyLiked] = useState(false)
   const [showOnlyFree, setShowOnlyFree] = useState(false)
   const [authMode, setAuthMode] = useState('login') // 'login' or 'signup'
@@ -125,6 +125,12 @@ function App() {
 
   // Geolocation for initial area setting
   useEffect(() => {
+    // Check for guide parameter to auto-open About modal
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('guide') === 'true') {
+      setIsAboutModalOpen(true)
+    }
+
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
