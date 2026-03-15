@@ -611,7 +611,7 @@ function App() {
               {evt.price_info && (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
                   <Ticket size={12} style={{ flexShrink: 0, marginTop: '1px', color: 'var(--accent-color)' }} />
-                  <span style={{ whiteSpace: 'pre-wrap', lineHeight: '1.3' }}>{evt.price_info}</span>
+                  <span className="event-price-info">{evt.price_info}</span>
                 </div>
               )}
             </div>

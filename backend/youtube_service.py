@@ -5,66 +5,91 @@ YouTube Search Service
 """
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 from googleapiclient.discovery import build
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 
 from typing import Optional, List
 
-def search_artist_video(artist_name: str, exclude_ids: List[str] = [], suffix: str = "MV") -> Optional[str]:
+def search_artist_video(artist_name: str, exclude_ids: List[str] = [], suffix: Optional[str] = None) -> Optional[str]:
     """
     アーティスト名でYouTube検索し、最適な動画IDを返す。
-    タイトルにアーティスト名が含まれない場合はNoneを返す。
-    exclude_ids: 除外する動画IDのリスト（報告済み動画）
-    suffix: 検索ワードの末尾に追加する文字列（デフォルトは "MV"）
+    fallback: MVでヒットしなければ official mv で再試行。
     """
     if not YOUTUBE_API_KEY:
         print("YOUTUBE_API_KEY が設定されていません")
         return None
 
+    # デフォルトの検索ワード順
+    suffixes = [suffix] if suffix else ["MV", "official mv", "Music Video"]
+    
     try:
-        from datetime import datetime, timedelta
-        one_year_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%dT%H:%M:%SZ')
-
+        # 1年以内の動画に限定（アイドルの体制変更等への配慮）
+        published_after = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%dT%H:%M:%SZ')
         youtube = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
         
-        # 指定されたサフィックスで検索（より多くの候補を取得して除外に対応）
-        request = youtube.search().list(
-            part="snippet",
-            q=f"{artist_name} {suffix}",
-            type="video",
-            maxResults=10,
-            videoEmbeddable="true",
-            publishedAfter=one_year_ago
-        )
-        response = request.execute()
-        items = response.get("items", [])
-
-        if not items:
-            return None
-
         artist_lower = artist_name.lower()
 
-        for item in items:
-            title = item["snippet"]["title"].lower()
-            channel = item["snippet"]["channelTitle"].lower()
-            video_id = item["id"]["videoId"]
+        for s in suffixes:
+            request = youtube.search().list(
+                part="snippet",
+                q=f"{artist_name} {s}",
+                type="video",
+                maxResults=5,
+                videoEmbeddable="true",
+                publishedAfter=published_after
+            )
+            response = request.execute()
+            items = response.get("items", [])
 
-            # 報告済み動画はスキップ
-            if video_id in exclude_ids:
-                continue
+            # 無関係な動画（歌ってみた、踊ってみた等）を除外するキーワード
+            negative_keywords = ["歌ってみた", "踊ってみた", "cover", "弾いてみた"]
 
-            # タイトルまたはチャンネル名にアーティスト名が含まれるか確認
-            if artist_lower in title or artist_lower in channel:
-                return video_id
+            # 1. Official チャンネルを優先
+            for item in items:
+                title = item["snippet"]["title"].lower()
+                channel = item["snippet"]["channelTitle"].lower()
+                video_id = item["id"]["videoId"]
 
-        # 一致するものがなければNone（無関係な動画を弾く）
+                if video_id in exclude_ids:
+                    continue
+                
+                # 除外キーワードが含まれる場合はスキップ
+                if any(k in title for k in negative_keywords):
+                    continue
+
+                # チャンネル名にアーティスト名が含まれ、かつ "official" という単語がある場合を最優先
+                if artist_lower in channel and "official" in channel:
+                    return video_id
+
+            # 2. 次にタイトルにアーティスト名が含まれるものを確認
+            for item in items:
+                title = item["snippet"]["title"].lower()
+                channel = item["snippet"]["channelTitle"].lower()
+                video_id = item["id"]["videoId"]
+
+                if video_id in exclude_ids:
+                    continue
+
+                if any(k in title for k in negative_keywords):
+                    continue
+
+                if artist_lower in title or artist_lower in channel:
+                    return video_id
+
         return None
 
     except Exception as e:
+        # Check for quota exceeded error in the exception message or type
+        error_str = str(e).lower()
+        if "quotaexceeded" in error_str or "quota exceeded" in error_str:
+            print(f"YouTube API クォータ制限超過: {artist_name}")
+            raise RuntimeError(f"YouTube Quota Exceeded: {e}")
+            
         print(f"YouTube検索エラー ({artist_name}): {e}")
         return None
 

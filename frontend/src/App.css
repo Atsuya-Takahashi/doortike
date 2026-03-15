@@ -455,6 +455,8 @@
   font-size: 0.95rem;
   margin-bottom: 6px;
   line-height: 1.3;
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 
 .event-link {
@@ -477,6 +479,15 @@
   line-height: 1.5;
   padding-right: 5px;
   /* Extra buffer to avoid image touch */
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
+.event-price-info {
+  white-space: pre-wrap;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 
 .performer-name {
