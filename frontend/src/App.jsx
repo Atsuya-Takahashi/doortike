@@ -25,7 +25,7 @@ function App() {
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false)
   const [isPassModalOpen, setIsPassModalOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
-  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false)
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(true)
   const [showOnlyLiked, setShowOnlyLiked] = useState(false)
   const [showOnlyFree, setShowOnlyFree] = useState(false)
   const [authMode, setAuthMode] = useState('login') // 'login' or 'signup'
