@@ -1108,12 +1108,11 @@ function App() {
     const todayMidnightFull = todayEvents.filter(e => e.is_midnight)
 
     const processGroup = (group) => {
-      // Priority sorting
+      // 1. Group by priority status
       const prs = group.filter(e => e.is_pr)
-      const happenings = group.filter(e => !e.is_pr && isEventHappening(e))
-      const hots = group.filter(e => !e.is_pr && !isEventHappening(e) && e.bookmark_count >= 5)
-      const pickups = group.filter(e => !e.is_pr && !isEventHappening(e) && e.bookmark_count < 5 && (e.is_pickup || e.pickup_type === 'staff'))
-      const others = group.filter(e => !e.is_pr && !isEventHappening(e) && e.bookmark_count < 5 && !e.is_pickup && e.pickup_type !== 'staff')
+      const hots = group.filter(e => !e.is_pr && e.bookmark_count >= 5)
+      const pickups = group.filter(e => !e.is_pr && e.bookmark_count < 5 && (e.is_pickup || e.pickup_type === 'staff'))
+      const others = group.filter(e => !e.is_pr && e.bookmark_count < 5 && !e.is_pickup && e.pickup_type !== 'staff')
 
       const sortByOpenTime = (a, b) => {
         const timeA = a.open_time || '99:99'
@@ -1121,15 +1120,15 @@ function App() {
         return timeA.localeCompare(timeB)
       }
 
-      // Sort each sub-group by time
+      // 2. Sort each priority group by time for inner consistency
       prs.sort(sortByOpenTime)
-      happenings.sort(sortByOpenTime)
       hots.sort(sortByOpenTime)
       pickups.sort(sortByOpenTime)
       others.sort(sortByOpenTime)
 
-      // Concatenate in priority order: PR > Happening > HOT > STAFF PICK > OTHERS
-      return [...prs, ...happenings, ...hots, ...pickups, ...others]
+      // 3. Concatenate based on requested rule: PR > HOT > STAFF PICK > OTHERS
+      // "Happening" (開催中) doesn't influence position, only visual style.
+      return [...prs, ...hots, ...pickups, ...others]
     }
 
     const todayRegular = processGroup(todayRegularFull)
