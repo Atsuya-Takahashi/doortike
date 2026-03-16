@@ -704,11 +704,15 @@ function App() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Clock size={12} style={{ flexShrink: 0, color: 'var(--accent-color)' }} />
                 <span>
-                  OPEN {evt.open_time} / START {evt.start_time}
-                  {isEventHappening(evt) && (
-                    <span style={{ marginLeft: '10px', color: '#FF3366', fontWeight: '800', fontSize: '0.75rem', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
-                      <span style={{ fontSize: '0.8rem', marginRight: '2px', textDecoration: 'none', display: 'inline-block' }}>🔴</span> 開催中
-                    </span>
+                  {isEventHappening(evt) ? (
+                    <>
+                      <span style={{ color: '#FF3366', fontWeight: '800', fontSize: '0.75rem', marginRight: '8px' }}>
+                        <span style={{ fontSize: '0.8rem', marginRight: '2px', display: 'inline-block' }}>🔴</span> 開催中
+                      </span>
+                      START {evt.start_time}
+                    </>
+                  ) : (
+                    <>OPEN {evt.open_time} / START {evt.start_time}</>
                   )}
                 </span>
               </div>
@@ -767,17 +771,23 @@ function App() {
                   background: 'var(--control-bg)',
                   color: 'var(--text-secondary)',
                   borderRadius: '12px',
-                  fontSize: '0.7rem',
-                  fontWeight: '500',
+                  fontSize: '0.8rem',
+                  fontWeight: '600',
                   border: '1px solid var(--control-border)',
                   marginRight: 'auto'
                 }}>
-                  <span style={{ fontSize: '0.65rem', marginRight: '3px' }}>🥤</span>1D ¥{evt.livehouse.drink_fee}
+                  1D ¥{evt.livehouse.drink_fee}
                 </span>
               )}
 
               {(evt.livehouse.blog_url || evt.coupon_url) && (
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginLeft: evt.livehouse.drink_fee ? '0' : 'auto' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '8px', 
+                  alignItems: 'center', 
+                  marginLeft: evt.livehouse.drink_fee ? '0' : 'auto',
+                  marginRight: '30px'
+                }}>
                   {evt.livehouse.blog_url && (
                     <a
                       href={evt.livehouse.blog_url}
@@ -940,17 +950,19 @@ function App() {
                 <div 
                   className="pr-label"
                   style={{
-                    padding: '4px 10px',
-                    background: 'linear-gradient(90deg, #FF3366 0%, #FF5C8A 100%)',
+                    padding: '6px 14px',
+                    background: 'linear-gradient(135deg, #B8860B 0%, #FFD700 100%)',
                     color: 'white',
                     fontSize: '0.65rem',
-                    fontWeight: '800',
-                    borderRadius: '4px',
-                    letterSpacing: '0.02em',
-                    backdropFilter: 'blur(4px)',
-                    boxShadow: '2px 2px 10px rgba(255, 51, 102, 0.4)',
+                    fontWeight: '900',
+                    borderRadius: '6px',
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    backdropFilter: 'blur(8px)',
+                    boxShadow: '0 4px 15px rgba(184, 134, 11, 0.4)',
                     whiteSpace: 'nowrap',
-                    borderRight: 'none'
+                    border: '1px solid rgba(255, 255, 255, 0.4)',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.2)'
                   }}
                 >
                   {evt.pr_type === 'tokyo' ? 'TOKYO FEATURED (PR)' : 'Fan Support (PR)'}
