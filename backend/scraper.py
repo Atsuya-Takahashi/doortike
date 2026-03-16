@@ -530,13 +530,27 @@ async def scrape_era_events(page, db_session, youtube_fetch_count: int, pending_
             title_elem = await item.query_selector('h4')
             title = (await title_elem.text_content()).strip() if title_elem else "Unknown Title"
             
+            # Skip non-public events or rental info
+            skip_titles = ["HALL RENTAL", "レンタル"]
+            if any(st in title.upper() for st in skip_titles):
+                print(f"[{venue_name}] Skipping non-public event: {title}")
+                continue
+            
             # Performers often in .w-flyer
             flyer_div = await item.query_selector('.w-flyer')
             performers_str = ""
             if flyer_div:
-                # Clean up text from .w-flyer (removing ticket details if they are nested)
-                # But for now, let's take the top text
-                performers_str = (await flyer_div.text_content()).split('[チケット発売]')[0].split('［チケット販売情報］')[0].strip()
+                # Use inner_html to preserve <br> as delimiters
+                flyer_html = await flyer_div.inner_html()
+                # Split by <br> or other common separators and join with " / "
+                p_text = flyer_html.split('<div')[0].split('[チケット')[0].split('［チケット')[0]
+                # Replace <br> and <br/> with " / "
+                p_text = re.sub(r'<br\s*/?>', ' / ', p_text, flags=re.IGNORECASE)
+                # Remove any remaining tags
+                p_text = re.sub(r'<[^>]+>', '', p_text).strip()
+                # Clean up multiple slashes or spaces
+                performers_str = re.sub(r'\s*/\s*', ' / ', p_text)
+                performers_str = re.sub(r'\s{2,}', ' ', performers_str).strip()
             
             if not performers_str:
                 performers_str = title
@@ -549,7 +563,24 @@ async def scrape_era_events(page, db_session, youtube_fetch_count: int, pending_
             if notes_wrapper:
                 text = await notes_wrapper.text_content()
                 time_text = text if text else ""
-                price_info = sanitize_price_info(text) if text else ""
+                
+                # Prettify Price Info for ERA
+                # Example: "ADV ¥2,500DOOR ¥3,000" -> "ADV ¥2,500 / DOOR ¥3,000"
+                price_match = re.search(r'(ADV.*?)(DOOR.*)', text, re.IGNORECASE)
+                if price_match:
+                    adv_part = price_match.group(1).strip()
+                    door_part = price_match.group(2).strip()
+                    
+                    # Remove playguide noise (e.g., ●LivePocket) from the door part
+                    # We look for common markers to stop at
+                    door_part = re.split(r'[●■【]|[a-zA-Z\d\.\s]*?(LivePocket|e\+|ぴあ|ローソン|チケット)', door_part, flags=re.IGNORECASE)[0].strip()
+                    
+                    price_info = f"{adv_part} / {door_part}"
+                else:
+                    price_info = sanitize_price_info(text)
+                
+                # Final cleanup: remove trailing/leading noise
+                price_info = price_info.strip()
             
             image_url = None
             ticket_url = None
