@@ -1110,9 +1110,8 @@ function App() {
     const processGroup = (group) => {
       // 1. Group by priority status
       const prs = group.filter(e => e.is_pr)
-      const hots = group.filter(e => !e.is_pr && e.bookmark_count >= 5)
-      const pickups = group.filter(e => !e.is_pr && e.bookmark_count < 5 && (e.is_pickup || e.pickup_type === 'staff'))
-      const others = group.filter(e => !e.is_pr && e.bookmark_count < 5 && !e.is_pickup && e.pickup_type !== 'staff')
+      const pickups = group.filter(e => !e.is_pr && (e.is_pickup || e.pickup_type === 'staff'))
+      const others = group.filter(e => !e.is_pr && !e.is_pickup && e.pickup_type !== 'staff')
 
       const sortByOpenTime = (a, b) => {
         const timeA = a.open_time || '99:99'
@@ -1122,13 +1121,12 @@ function App() {
 
       // 2. Sort each priority group by time for inner consistency
       prs.sort(sortByOpenTime)
-      hots.sort(sortByOpenTime)
       pickups.sort(sortByOpenTime)
       others.sort(sortByOpenTime)
 
-      // 3. Concatenate based on requested rule: PR > HOT > STAFF PICK > OTHERS
-      // "Happening" (開催中) doesn't influence position, only visual style.
-      return [...prs, ...hots, ...pickups, ...others]
+      // 3. Concatenate based on rule: PR > STAFF PICK > OTHERS
+      // "HOT" and "Happening" (開催中) do not influence position anymore.
+      return [...prs, ...pickups, ...others]
     }
 
     const todayRegular = processGroup(todayRegularFull)
