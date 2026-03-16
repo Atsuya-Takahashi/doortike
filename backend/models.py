@@ -51,9 +51,11 @@ class Event(Base):
     is_pr = Column(Boolean, default=False)
     pr_type = Column(String, nullable=True)  # 'featured' or 'fan_support'
     is_pickup = Column(Boolean, default=False)
+    pickup_type = Column(String, nullable=True)  # 'staff', 'hot', etc.
     is_midnight = Column(Boolean, default=False)
     artists_data = Column(JSON, nullable=True)  # Store list of performers with their youtube_id: [{"name": "...", "youtube_id": "..."}]
     image_url = Column(String, nullable=True)
+    bookmark_count = Column(Integer, default=0, nullable=False)
     
     livehouse = relationship("LiveHouse", back_populates="events")
     reports = relationship("VideoReport", back_populates="event")

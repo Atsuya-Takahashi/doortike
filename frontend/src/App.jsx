@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { format, addDays } from 'date-fns'
-import { MapPin, Clock, Heart, Bookmark, Calendar, ChevronRight, ChevronDown, Activity, BookOpen, Ticket, X, CheckCircle, CreditCard, ArrowUp, ArrowDown, User, ExternalLink, ArrowUpRight, Moon, Sun, Briefcase, Plane, Zap, Lock, Flag } from 'lucide-react'
+import { MapPin, Clock, Heart, Bookmark, Calendar, ChevronRight, ChevronDown, Activity, BookOpen, Ticket, X, CheckCircle, CreditCard, ArrowUp, ArrowDown, User, ExternalLink, ArrowUpRight, Moon, Sun, Briefcase, Plane, Zap, Flame, Lock, Flag } from 'lucide-react'
 import { auth, db, googleProvider, appleProvider } from './firebase'
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'
@@ -46,6 +46,12 @@ function App() {
       return null
     }
   })
+
+  // Admin Detection
+  const isAdmin = useMemo(() => {
+    // return true; // TEMPORARY: Force true for local testing
+    return currentUser && currentUser.uid === import.meta.env.VITE_ADMIN_UID;
+  }, [currentUser]);
 
   const [passCurrentTime, setPassCurrentTime] = useState(new Date())
 
@@ -274,6 +280,7 @@ function App() {
               is_pr: evt.is_pr,
               pr_type: evt.pr_type,
               is_pickup: evt.is_pickup,
+              pickup_type: evt.pickup_type,
               is_midnight: evt.is_midnight,
               livehouse: evt.livehouse
            }
@@ -374,6 +381,37 @@ function App() {
       console.log("Failed to sync report to backend, but UI is updated optimistically.");
     } finally {
       setIsReporting(false);
+    }
+  }
+
+  const handleToggleStaffPick = async (e, evt) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+
+    const newPickupType = evt.pickup_type === 'staff' ? null : 'staff';
+    const newIsPickup = !!newPickupType;
+
+    // Optimistic Update
+    setEvents(prev => prev.map(item => 
+      item.id === evt.id ? { ...item, is_pickup: newIsPickup, pickup_type: newPickupType } : item
+    ));
+
+    try {
+      const { error } = await supabase
+        .from('events')
+        .update({ 
+          is_pickup: newIsPickup, 
+          pickup_type: newPickupType 
+        })
+        .eq('id', evt.id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Error toggling staff pick:", err);
+      // Rollback
+      setEvents(prev => prev.map(item => 
+        item.id === evt.id ? { ...item, is_pickup: evt.is_pickup, pickup_type: evt.pickup_type } : item
+      ));
     }
   }
 
@@ -492,6 +530,15 @@ function App() {
       setBookmarkedEvents(newBookmarks);
     }
 
+    // Update local events state to reflect the new bookmark count immediately
+    setEvents(prev => prev.map(e => {
+      if (e.id === event.id) {
+        const increment = isBookmarked ? -1 : 1;
+        return { ...e, bookmark_count: (e.bookmark_count || 0) + increment };
+      }
+      return e;
+    }));
+
     if (currentUser) {
       try {
         const userDocRef = doc(db, 'users', currentUser.uid);
@@ -501,6 +548,18 @@ function App() {
       } catch (error) {
         console.error("Error updating bookmarks in Firestore:", error);
       }
+    }
+
+    // Sync Bookmark Count to Supabase (Regardless of guest/auth for aggregate tracking)
+    try {
+      const increment = isBookmarked ? -1 : 1;
+      const { error } = await supabase.rpc('handle_bookmark_count', {
+        p_event_id: event.id,
+        p_increment: increment
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error syncing bookmark count to Supabase:", error);
     }
   }
 
@@ -529,10 +588,46 @@ function App() {
     }
   }
 
+  const isEventHappening = (evt) => {
+    if (!evt.start_time || !evt.date) return false;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    if (evt.date !== todayStr) return false;
+
+    try {
+      const [hours, minutes] = evt.start_time.split(':').map(Number);
+      if (isNaN(hours) || isNaN(minutes)) return false;
+      const startTime = new Date();
+      startTime.setHours(hours, minutes, 0, 0);
+      const now = new Date();
+      const diffMs = now - startTime;
+      const diffHours = diffMs / (1000 * 60 * 60);
+      return diffHours >= 0 && diffHours <= 3;
+    } catch (e) {
+      return false;
+    }
+  }
+
   const renderEventCard = (evt) => {
     if (!evt || !evt.livehouse) return null;
+    const happening = isEventHappening(evt);
     return (
-      <div className={`glass-panel event-card ${evt.pr_type ? 'pr-card' : ''}`} key={evt.id} style={{ display: 'flex', flexDirection: 'row', overflow: 'hidden', padding: 0 }}>
+      <div className={`glass-panel event-card ${evt.is_pr ? 'pr-card' : ''} ${evt.pickup_type === 'staff' && !evt.is_pr ? 'staff-pick-card' : ''} ${happening ? 'is-happening' : ''}`} key={evt.id} style={{ display: 'flex', flexDirection: 'row', overflow: 'visible', padding: 0, position: 'relative' }}>
+          {/* Status Badges */}
+          <div className="card-badge-container">
+            {(evt.pickup_type === 'hot' || (evt.bookmark_count >= 5)) && <span className="card-badge hot-badge"><Flame size={12} style={{marginRight: '2px'}} /> HOT</span>}
+          </div>
+
+          {/* Admin Pickup Toggle */}
+          {isAdmin && (
+            <button 
+              className={`admin-pickup-btn ${evt.pickup_type === 'staff' ? 'active' : ''}`}
+              onClick={(e) => handleToggleStaffPick(e, evt)}
+              title="STAFF PICK の切り替え"
+            >
+              👑
+            </button>
+          )}
+
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: '16px 15px' }}>
             <div className="event-header">
               <div className="venue-info">
@@ -608,7 +703,14 @@ function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '4px', marginBottom: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Clock size={12} style={{ flexShrink: 0, color: 'var(--accent-color)' }} />
-                <span>OPEN {evt.open_time} / START {evt.start_time}</span>
+                <span>
+                  OPEN {evt.open_time} / START {evt.start_time}
+                  {isEventHappening(evt) && (
+                    <span style={{ marginLeft: '10px', color: '#FF3366', fontWeight: '800', fontSize: '0.75rem', textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+                      <span style={{ fontSize: '0.8rem', marginRight: '2px', textDecoration: 'none', display: 'inline-block' }}>🔴</span> 開催中
+                    </span>
+                  )}
+                </span>
               </div>
               {evt.price_info && (
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
@@ -758,20 +860,30 @@ function App() {
             width: '120px',
             flexShrink: 0,
             borderRadius: '0',
-            overflow: 'hidden',
+            overflow: 'visible', // Allow labels to protrude
             backgroundColor: 'var(--control-bg)',
-            position: 'relative'
+            position: 'relative',
+            zIndex: 5
           }}>
-            {evt.image_url ? (
-              <img
-                src={evt.image_url}
-                alt="Thumbnail"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                loading="lazy"
-              />
-            ) : (
-              <div className="no-image-placeholder">NO IMAGE</div>
-            )}
+            {/* Image Clipping Container */}
+            <div style={{
+              width: '100%',
+              height: '100%',
+              overflow: 'hidden',
+              borderRadius: '0 var(--surface-radius) var(--surface-radius) 0',
+              position: 'relative'
+            }}>
+              {evt.image_url ? (
+                <img
+                  src={evt.image_url}
+                  alt="Thumbnail"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  loading="lazy"
+                />
+              ) : (
+                <div className="no-image-placeholder">NO IMAGE</div>
+              )}
+            </div>
             
             <button
               onClick={(e) => { e.stopPropagation(); toggleBookmark(evt); }}
@@ -798,6 +910,53 @@ function App() {
             >
               <Bookmark fill={isEventBookmarked(evt.id) ? "var(--accent-color)" : "none"} color={isEventBookmarked(evt.id) ? "var(--accent-color)" : "#475569"} size={18} />
             </button>
+
+            {/* Image Area Badges (Bottom Right Stack) */}
+            <div style={{
+              position: 'absolute',
+              bottom: '12px',
+              right: '-10px', // Protrude slightly without going off-screen
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: '6px',
+              zIndex: 10
+            }}>
+              {evt.pickup_type === 'staff' && !evt.is_pr && (
+                <div className="card-badge staff-pick-badge" style={{ 
+                  margin: 0, 
+                  padding: '4px 8px',
+                  textAlign: 'center',
+                  fontSize: '0.65rem',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '2px 2px 8px rgba(0,0,0,0.2)',
+                  borderRadius: '4px',
+                  borderRight: 'none'
+                }}>
+                  STAFF PICK
+                </div>
+              )}
+              {evt.is_pr && (
+                <div 
+                  className="pr-label"
+                  style={{
+                    padding: '4px 10px',
+                    background: 'linear-gradient(90deg, #FF3366 0%, #FF5C8A 100%)',
+                    color: 'white',
+                    fontSize: '0.65rem',
+                    fontWeight: '800',
+                    borderRadius: '4px',
+                    letterSpacing: '0.02em',
+                    backdropFilter: 'blur(4px)',
+                    boxShadow: '2px 2px 10px rgba(255, 51, 102, 0.4)',
+                    whiteSpace: 'nowrap',
+                    borderRight: 'none'
+                  }}
+                >
+                  {evt.pr_type === 'tokyo' ? 'TOKYO FEATURED (PR)' : 'Fan Support (PR)'}
+                </div>
+              )}
+            </div>
           </div>
       </div>
     );
@@ -938,8 +1097,9 @@ function App() {
 
     const processGroup = (group) => {
       const prs = group.filter(e => e.is_pr)
-      const pickups = group.filter(e => e.is_pickup && !e.is_pr)
-      const others = group.filter(e => !e.is_pr && !e.is_pickup)
+      const hots = group.filter(e => !e.is_pr && e.bookmark_count >= 5)
+      const pickups = group.filter(e => !e.is_pr && e.bookmark_count < 5 && (e.is_pickup || e.pickup_type === 'staff'))
+      const others = group.filter(e => !e.is_pr && e.bookmark_count < 5 && !e.is_pickup && e.pickup_type !== 'staff')
 
       const sortByOpenTime = (a, b) => {
         const timeA = a.open_time || '99:99'
@@ -947,16 +1107,20 @@ function App() {
         return timeA.localeCompare(timeB)
       }
 
+      hots.sort(sortByOpenTime)
       pickups.sort(sortByOpenTime)
       others.sort(sortByOpenTime)
 
+      // Priority list: PR > HOT > STAFF PICK
       let topTwo = [...prs]
-      let remainingSpecial = [...pickups]
+      let remainingSpecial = [...hots, ...pickups]
+      
       if (topTwo.length < 2) {
         const needed = 2 - topTwo.length
         topTwo = [...topTwo, ...remainingSpecial.slice(0, needed)]
         remainingSpecial = remainingSpecial.slice(needed)
       }
+      
       const finalOthers = [...remainingSpecial, ...others].sort(sortByOpenTime)
       return [...topTwo, ...finalOthers]
     }

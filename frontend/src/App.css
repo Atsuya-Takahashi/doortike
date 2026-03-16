@@ -327,6 +327,14 @@
   animation: slideUp 0.5s ease-out backwards;
 }
 
+.event-card.is-happening:hover {
+  box-shadow: -4px 0 12px rgba(255, 51, 102, 0.1);
+}
+
+.event-card.is-happening:hover::before {
+  background: #FF3366;
+}
+
 .event-card.pr-card {
   border: 1.5px solid var(--accent-color);
   box-shadow: 0 0 15px rgba(255, 51, 102, 0.15);
@@ -1244,4 +1252,98 @@
   .terms-header h1 {
     font-size: 1.8rem;
   }
+}
+
+/* --- STAFF PICK & HOT Styles --- */
+.card-badge-container {
+  position: absolute;
+  top: -12px;
+  left: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.card-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  display: inline-flex;
+  align-items: center;
+}
+
+.staff-pick-badge {
+  background: var(--accent-color);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.hot-badge {
+  background: #f97316;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.4);
+  padding: 4px 10px;
+  border-radius: 20px;
+  animation: hot-pulse 2s infinite ease-in-out;
+}
+
+@keyframes hot-pulse {
+  0% { transform: scale(1); box-shadow: 0 2px 8px rgba(249, 115, 22, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 4px 12px rgba(249, 115, 22, 0.6); }
+  100% { transform: scale(1); box-shadow: 0 2px 8px rgba(249, 115, 22, 0.4); }
+}
+
+.pr-badge {
+  background: #FF3366; /* Red/Pink theme for PR */
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.event-card.staff-pick-card {
+  border: 1.5px solid var(--accent-color) !important;
+  box-shadow: 0 8px 32px rgba(255, 51, 102, 0.15) !important;
+}
+
+.admin-pickup-btn {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  left: auto;
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  color: #000;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  font-size: 1rem;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.admin-pickup-btn:hover {
+  transform: scale(1.15) rotate(5deg);
+  background: white;
+  border-color: var(--accent-color);
+}
+
+.admin-pickup-btn.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
 }

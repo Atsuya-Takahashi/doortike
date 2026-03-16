@@ -109,6 +109,19 @@ def fetch_og_image(url):
     return None
 
 
+def determine_pickup_status(performers: str, bookmark_count: int = 0, current_is_pickup: bool = False, current_pickup_type: Optional[str] = None):
+    """
+    Determine if an event should be marked as pickup (STAFF PICK).
+    HOT status is handled real-time on the frontend based on bookmark count.
+    """
+    # Preserve manual staff picks
+    if current_is_pickup and current_pickup_type == 'staff':
+        return True, 'staff'
+    
+    # Default to current (usually False, None)
+    return current_is_pickup, current_pickup_type
+
+
 def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int, pending_reports: Optional[Dict] = None) -> tuple[list, int]:
     """
     performers文字列を分割し、アーティスト名とYouTube IDのリストを返す。
@@ -452,8 +465,13 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                     existing_event.is_midnight = is_midnight
                     existing_event.artists_data = artist_info_list
                     existing_event.image_url = image_url
+                    
+                    is_p, p_t = determine_pickup_status(performers_str, existing_event.bookmark_count, existing_event.is_pickup, existing_event.pickup_type)
+                    existing_event.is_pickup = is_p
+                    existing_event.pickup_type = p_t
                     print(f"[{venue_name}] Updated: {title}")
                 else:
+                    is_p, p_t = determine_pickup_status(performers_str)
                     new_event = Event(
                         livehouse_id=livehouse_id,
                         date=found_date.date(),
@@ -463,6 +481,8 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                         start_time=start_time,
                         price_info=price_info,
                         ticket_url=ticket_url,
+                        is_pickup=is_p,
+                        pickup_type=p_t,
                         is_midnight=is_midnight,
                         artists_data=artist_info_list,
                         image_url=image_url
@@ -656,8 +676,13 @@ async def scrape_era_events(page, db_session, youtube_fetch_count: int, pending_
                 existing_event.is_midnight = is_midnight
                 existing_event.artists_data = artist_info_list
                 existing_event.image_url = image_url
+                
+                is_p, p_t = determine_pickup_status(performers_str, existing_event.bookmark_count, existing_event.is_pickup, existing_event.pickup_type)
+                existing_event.is_pickup = is_p
+                existing_event.pickup_type = p_t
                 print(f"[{venue_name}] Updated: {title}")
             else:
+                is_p, p_t = determine_pickup_status(performers_str)
                 new_event = Event(
                     livehouse_id=livehouse_id,
                     date=found_date.date(),
@@ -667,6 +692,8 @@ async def scrape_era_events(page, db_session, youtube_fetch_count: int, pending_
                     start_time=start_time,
                     price_info=price_info,
                     ticket_url=ticket_url,
+                    is_pickup=is_p,
+                    pickup_type=p_t,
                     is_midnight=is_midnight,
                     artists_data=artist_info_list,
                     image_url=image_url
@@ -806,8 +833,13 @@ async def scrape_mosaic_events(page, db_session, youtube_fetch_count, pending_re
                 existing_event.is_midnight = is_midnight
                 existing_event.artists_data = artist_info_list
                 existing_event.image_url = image_url
+                
+                is_p, p_t = determine_pickup_status(performers_str, existing_event.bookmark_count, existing_event.is_pickup, existing_event.pickup_type)
+                existing_event.is_pickup = is_p
+                existing_event.pickup_type = p_t
                 print(f"[{venue_name}] Updated: {title}")
             else:
+                is_p, p_t = determine_pickup_status(performers_str)
                 new_event = Event(
                     livehouse_id=livehouse_id,
                     date=found_date.date(),
@@ -817,6 +849,8 @@ async def scrape_mosaic_events(page, db_session, youtube_fetch_count, pending_re
                     start_time=start_time,
                     price_info=price_info,
                     ticket_url=ticket_url,
+                    is_pickup=is_p,
+                    pickup_type=p_t,
                     is_midnight=is_midnight,
                     artists_data=artist_info_list,
                     image_url=image_url
@@ -976,8 +1010,13 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
                 existing_event.is_midnight = is_midnight
                 existing_event.artists_data = artist_info_list
                 existing_event.image_url = image_url
+                
+                is_p, p_t = determine_pickup_status(performers_str, existing_event.bookmark_count, existing_event.is_pickup, existing_event.pickup_type)
+                existing_event.is_pickup = is_p
+                existing_event.pickup_type = p_t
                 print(f"[{venue_name}] Updated: {title}")
             else:
+                is_p, p_t = determine_pickup_status(performers_str)
                 new_event = Event(
                     livehouse_id=livehouse_id,
                     date=found_date.date(),
@@ -987,6 +1026,8 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
                     start_time=start_time,
                     price_info=price_info,
                     ticket_url=ticket_url,
+                    is_pickup=is_p,
+                    pickup_type=p_t,
                     is_midnight=is_midnight,
                     artists_data=artist_info_list,
                     image_url=image_url
