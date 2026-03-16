@@ -357,14 +357,10 @@ function App() {
 
     try {
       const { error } = await supabase
-        .from('video_reports')
-        .insert([
-          { 
-            event_id: videoModal.eventId, 
-            artist_name: videoModal.artistName,
-            status: 'pending' 
-          }
-        ])
+        .rpc('report_video', { 
+          p_event_id: videoModal.eventId, 
+          p_artist_name: videoModal.artistName 
+        })
 
       if (error) throw error;
 

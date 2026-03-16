@@ -65,6 +65,7 @@ class VideoReport(Base):
     event_id = Column(Integer, ForeignKey('events.id'), nullable=False)
     artist_name = Column(String, nullable=False)
     status = Column(String, default='pending') # 'pending', 'resolved', 'ignored'
+    report_count = Column(Integer, default=1) # number of times reported for this (event_id, artist_name)
     created_at = Column(DateTime, server_default=text("now()"))
     
     event = relationship("Event", back_populates="reports")
