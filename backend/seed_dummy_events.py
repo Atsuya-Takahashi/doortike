@@ -86,8 +86,7 @@ def seed_events():
                 "performers": "DREAMY SOUNDS, NOISE CLOUD",
                 "open_time": "17:00",
                 "start_time": "17:30",
-                "price_info": "前売 ¥3,000 (+1D ¥600)",
-                "blog_url": "https://example.com/blog/koenji"
+                "price_info": "前売 ¥3,000 (+1D ¥600)"
             }
         ]
         

@@ -14,8 +14,7 @@ if lh:
         open_time="11:00",
         start_time="11:30",
         price_info="前売 ¥10,000 / 当日 ¥12,000\n(Drink代別途¥600 / 3日間通し券あり)",
-        ticket_url="https://eplus.jp/",
-        blog_url="https://example.com/extreme",
+        ticket_url="https://eplus.jp/extreme",
         coupon_url="https://example.com/extreme"
     )
     db.add(extreme_event)

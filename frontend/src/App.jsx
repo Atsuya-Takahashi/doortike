@@ -275,7 +275,7 @@ function App() {
               start_time: evt.start_time,
               price_info: evt.price_info,
               ticket_url: evt.ticket_url,
-              blog_url: evt.blog_url,
+              ticket_url: evt.ticket_url,
               coupon_url: evt.coupon_url,
               is_pr: evt.is_pr,
               pr_type: evt.pr_type,

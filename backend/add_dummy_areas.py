@@ -42,7 +42,6 @@ for v in dummy_venues:
                 start_time="18:30", 
                 price_info="¥3000",
                 ticket_url="https://eplus.jp/" if v["name"] == "下北沢SHELTER" else None,
-                blog_url="https://example.com/blog/shinjuku-loft-report" if v["name"] == "新宿LOFT" else None,
                 coupon_url="https://example.com/coupon/123" if v["name"] == "新宿LOFT" else None
             ))
         db.commit()

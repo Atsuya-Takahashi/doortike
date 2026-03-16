@@ -46,7 +46,6 @@ class Event(Base):
     start_time = Column(String, nullable=True)
     price_info = Column(String, nullable=True)
     ticket_url = Column(String, nullable=True)
-    blog_url = Column(String, nullable=True)
     coupon_url = Column(String, nullable=True)
     is_pr = Column(Boolean, default=False)
     pr_type = Column(String, nullable=True)  # 'featured' or 'fan_support'
