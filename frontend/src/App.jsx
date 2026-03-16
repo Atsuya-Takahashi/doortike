@@ -1108,10 +1108,12 @@ function App() {
     const todayMidnightFull = todayEvents.filter(e => e.is_midnight)
 
     const processGroup = (group) => {
+      // Priority sorting
       const prs = group.filter(e => e.is_pr)
-      const hots = group.filter(e => !e.is_pr && e.bookmark_count >= 5)
-      const pickups = group.filter(e => !e.is_pr && e.bookmark_count < 5 && (e.is_pickup || e.pickup_type === 'staff'))
-      const others = group.filter(e => !e.is_pr && e.bookmark_count < 5 && !e.is_pickup && e.pickup_type !== 'staff')
+      const happenings = group.filter(e => !e.is_pr && isEventHappening(e))
+      const hots = group.filter(e => !e.is_pr && !isEventHappening(e) && e.bookmark_count >= 5)
+      const pickups = group.filter(e => !e.is_pr && !isEventHappening(e) && e.bookmark_count < 5 && (e.is_pickup || e.pickup_type === 'staff'))
+      const others = group.filter(e => !e.is_pr && !isEventHappening(e) && e.bookmark_count < 5 && !e.is_pickup && e.pickup_type !== 'staff')
 
       const sortByOpenTime = (a, b) => {
         const timeA = a.open_time || '99:99'
@@ -1119,22 +1121,15 @@ function App() {
         return timeA.localeCompare(timeB)
       }
 
+      // Sort each sub-group by time
+      prs.sort(sortByOpenTime)
+      happenings.sort(sortByOpenTime)
       hots.sort(sortByOpenTime)
       pickups.sort(sortByOpenTime)
       others.sort(sortByOpenTime)
 
-      // Priority list: PR > HOT > STAFF PICK
-      let topTwo = [...prs]
-      let remainingSpecial = [...hots, ...pickups]
-      
-      if (topTwo.length < 2) {
-        const needed = 2 - topTwo.length
-        topTwo = [...topTwo, ...remainingSpecial.slice(0, needed)]
-        remainingSpecial = remainingSpecial.slice(needed)
-      }
-      
-      const finalOthers = [...remainingSpecial, ...others].sort(sortByOpenTime)
-      return [...topTwo, ...finalOthers]
+      // Concatenate in priority order: PR > Happening > HOT > STAFF PICK > OTHERS
+      return [...prs, ...happenings, ...hots, ...pickups, ...others]
     }
 
     const todayRegular = processGroup(todayRegularFull)
