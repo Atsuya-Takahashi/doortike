@@ -3,7 +3,7 @@
 }
 
 .top-section {
-  padding: 15px 0 12px 0;
+  padding: 10px 0 8px 0;
   border-bottom: 2px solid var(--glass-border);
   background: var(--glass-bg);
   backdrop-filter: blur(8px);
@@ -29,8 +29,8 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  min-height: 40px;
-  margin-bottom: 10px;
+  min-height: 64px;
+  margin-bottom: 6px;
   animation: fadeInDown 0.8s ease-out;
 }
 

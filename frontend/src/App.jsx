@@ -1195,7 +1195,29 @@ function App() {
                 </div>
               </button>
             </div>
-            <h1>ドアチケ</h1>
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%', gap: '6px' }}>
+              <img 
+                src="/assets/logo.png" 
+                alt="ドアチケ" 
+                style={{ 
+                  height: '48px', 
+                  width: 'auto', 
+                  display: 'block',
+                  cursor: 'pointer'
+                }} 
+                onClick={() => navigateTo('/')}
+              />
+              <p style={{ 
+                margin: 0, 
+                fontSize: '0.7rem', 
+                fontWeight: '600', 
+                color: 'var(--text-secondary)',
+                letterSpacing: '0.1em',
+                opacity: 0.7
+              }}>
+                ドアチケ
+              </p>
+            </div>
           </header>
 
           <div className="location-filters" style={{ padding: '10px 10px 10px' }}>
