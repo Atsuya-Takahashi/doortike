@@ -131,6 +131,25 @@ function App() {
     })
   }, [])
 
+  // --- UTM Tracker Utility ---
+  const addUtmParams = (url, campaign) => {
+    if (!url) return url;
+    try {
+      const urlObj = new URL(url);
+      urlObj.searchParams.set('utm_source', 'doortike');
+      urlObj.searchParams.set('utm_medium', 'referral');
+      urlObj.searchParams.set('utm_campaign', campaign || 'general');
+      return urlObj.toString();
+    } catch (e) {
+      // Fallback for relative paths or malformed URLs
+      if (typeof url === 'string' && url.startsWith('http')) {
+        const separator = url.includes('?') ? '&' : '?';
+        return `${url}${separator}utm_source=doortike&utm_medium=referral&utm_campaign=${campaign || 'general'}`;
+      }
+      return url;
+    }
+  };
+
   // Geolocation for initial area setting
   useEffect(() => {
     // Check for guide parameter to auto-open About modal
@@ -711,7 +730,7 @@ function App() {
         videoId: perfInfo.youtube_id, 
         reported: reportedVideos.includes(perfInfo.name), 
         eventId: evt.id,
-        ticketUrl: evt.ticket_url || null 
+        ticketUrl: evt.ticket_url ? addUtmParams(evt.ticket_url, 'video_modal_ticket') : null 
       });
     };
 
@@ -760,7 +779,7 @@ function App() {
                         {idx > 0 && <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 4px' }}>/</span>}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                           <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}`}
+                            href={addUtmParams(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}`, 'card_map_link')}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
@@ -784,7 +803,7 @@ function App() {
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                       <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.livehouse.name)}`}
+                        href={addUtmParams(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.livehouse.name)}`, 'card_map_link')}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={(e) => e.stopPropagation()}
@@ -810,7 +829,7 @@ function App() {
 
             <h3 className="event-title">
               <a
-                href={evt.ticket_url || `https://www.google.com/search?q=${encodeURIComponent(`${evt.livehouse.name} ${evt.title} チケット`)}`}
+                href={evt.ticket_url ? addUtmParams(evt.ticket_url, 'card_title_ticket') : addUtmParams(`https://www.google.com/search?q=${encodeURIComponent(`${evt.livehouse.name} ${evt.title} チケット`)}`, 'card_title_google_search')}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => {
@@ -905,7 +924,7 @@ function App() {
                 }}>
                   {evt.livehouse.blog_url && (
                     <a
-                      href={evt.livehouse.blog_url}
+                      href={addUtmParams(evt.livehouse.blog_url, 'card_blog_link')}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
@@ -2146,7 +2165,7 @@ function App() {
                 {/* チケットリンク */}
                 {videoModal.ticketUrl && (
                   <a
-                    href={videoModal.ticketUrl}
+                    href={addUtmParams(videoModal.ticketUrl, 'video_modal_link')}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
