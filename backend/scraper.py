@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from playwright.async_api import async_playwright
 try:
     from models import SessionLocal, LiveHouse, Event, Artist, VideoReport
@@ -109,7 +109,9 @@ def fetch_og_image(url):
     return None
 
 
+
 def determine_pickup_status(performers: str, bookmark_count: int = 0, current_is_pickup: bool = False, current_pickup_type: Optional[str] = None):
+    # ... existing content ... (shortened but I'll write the full replacement)
     """
     Determine if an event should be marked as pickup (STAFF PICK).
     HOT status is handled real-time on the frontend based on bookmark count.
@@ -122,26 +124,172 @@ def determine_pickup_status(performers: str, bookmark_count: int = 0, current_is
     return current_is_pickup, current_pickup_type
 
 
-def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int, pending_reports: Optional[Dict] = None) -> tuple[list, int]:
+def upsert_event(db_session, event_data: dict, livehouse_id: int):
+    """
+    Upsert an event into the database.
+    event_data keys: title, date, performers, open_time, start_time, price_info, ticket_url, is_midnight, artists_data, image_url
+    """
+    now = datetime.now(timezone.utc)
+    
+    # 既存イベントの検索ロジック
+    # 1. URLが一致する場合（同一イベントとみなす最強の根拠）
+    existing_event = None
+    if event_data.get('ticket_url'):
+        existing_event = db_session.query(Event).filter(
+            Event.livehouse_id == livehouse_id,
+            Event.date == event_data['date'],
+            Event.ticket_url == event_data['ticket_url']
+        ).first()
+    
+    # 2. URLが未指定、または一致しなかった場合、日付+時間(深夜フラグ)+タイトルで判定
+    if not existing_event:
+        existing_event = db_session.query(Event).filter(
+            Event.livehouse_id == livehouse_id,
+            Event.date == event_data['date'],
+            Event.is_midnight == event_data.get('is_midnight', False),
+            Event.title == event_data['title']
+        ).first()
+
+    if existing_event:
+        # 更新項目（既存の熱量データである bookmark_count は触らない）
+        existing_event.title = event_data['title']
+        existing_event.performers = event_data.get('performers', "")
+        existing_event.open_time = event_data.get('open_time', "")
+        existing_event.start_time = event_data.get('start_time', "")
+        existing_event.price_info = event_data.get('price_info', "")
+        existing_event.ticket_url = event_data.get('ticket_url')
+        existing_event.is_midnight = event_data.get('is_midnight', False)
+        existing_event.artists_data = event_data.get('artists_data', [])
+        existing_event.image_url = event_data.get('image_url')
+        existing_event.last_scraped_at = now
+        existing_event.status = 'published' # サイトに再掲されていたら公開に戻す
+        
+        # STAFF PICK 状態の維持または判定
+        is_p, p_t = determine_pickup_status(
+            existing_event.performers, 
+            existing_event.bookmark_count, 
+            existing_event.is_pickup, 
+            existing_event.pickup_type
+        )
+        existing_event.is_pickup = is_p
+        existing_event.pickup_type = p_t
+        print(f"[Upsert] Updated: {event_data['title']} ({event_data['date']})")
+    else:
+        # 新規作成
+        is_p, p_t = determine_pickup_status(event_data.get('performers', ""))
+        new_event = Event(
+            livehouse_id=livehouse_id,
+            date=event_data['date'],
+            title=event_data['title'],
+            performers=event_data.get('performers', ""),
+            open_time=event_data.get('open_time', ""),
+            start_time=event_data.get('start_time', ""),
+            price_info=event_data.get('price_info', ""),
+            ticket_url=event_data.get('ticket_url'),
+            is_midnight=event_data.get('is_midnight', False),
+            artists_data=event_data.get('artists_data', []),
+            image_url=event_data.get('image_url'),
+            last_scraped_at=now,
+            status='published',
+            is_pickup=is_p,
+            pickup_type=p_t
+        )
+        db_session.add(new_event)
+        print(f"[Upsert] Added: {event_data['title']} ({event_data['date']})")
+    
+    db_session.commit()
+
+
+def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int, pending_reports: Optional[Dict] = None, only_cache: bool = False) -> tuple[list, int]:
     """
     performers文字列を分割し、アーティスト名とYouTube IDのリストを返す。
-    必要に応じて外部APIを叩き、キャッシュ（artistsテーブル）も更新する。
-    pending_reports: {artist_name: VideoReport object}
+    only_cache=True の場合、API検索は行わず既存データのみを返す。
     """
     if not performers_str:
         return [], youtube_fetch_count
 
     artist_list = []
-    # 区切り文字（、, ／ / \n）で分割
-    names = [a.strip() for a in re.split(r'[、,／/\n]', performers_str) if a.strip()]
+    # 区切り文字（、, ／ / \n）で分割。さらに全角文字と半角スペース、または特定の境界でも分割を試みる
+    # 基本的には既存の明確な区切り文字を優先。スペース分割は慎重に行う
+    patterns = r'[、,／/\n]'
+    names = [a.strip() for a in re.split(patterns, performers_str) if a.strip()]
+    
+    # 特殊ケース: スペースで区切られていて、かつ両端が明らかに別のアーティスト名っぽい場合（暫定的に追加）
+    final_names = []
+    for n in names:
+        if ' ' in n and any(ord(c) > 127 for c in n):
+            # 全角文字を含むかつスペースがある場合、意味のある単語の境界で分割を試みる
+            # ここではシンプルにスペースでさらに分割
+            sub_names = [sn.strip() for sn in n.split(' ') if sn.strip()]
+            final_names.extend(sub_names)
+        else:
+            final_names.append(n)
+    names = final_names
 
     for artist_name in names:
+        # 1. 不要なラベル（【出演】等）を削る
+        artist_name = re.sub(r'^[【\[\(](出演|会場|開場|開演|O\.A\.|OA|Opening Act)[】\]\)]\s*', '', artist_name, flags=re.IGNORECASE)
+        artist_name = re.sub(r'^(出演|会場|開場|開演|O\.A\.|OA|Opening Act)[:：]\s*', '', artist_name, flags=re.IGNORECASE)
+        
+        # 2. 末尾の (O.A.) などを削る
+        artist_name = re.sub(r'\s*[（\(\[【](O\.A\.|OA|Opening Act)[）\)\]】]$', '', artist_name, flags=re.IGNORECASE)
+        
+        # 3. 楽器編成情報 (Vo. Gt. Ba. etc) を含む括弧を除去
+        # 例: "田中太郎(Vo.)" -> "田中太郎"
+        artist_name = re.sub(r'\s*[（\(\[【](Vo|Gt|Ba|Dr|Key|Per|Syn|Vj|DJ|Manipulator|Cho|Vocal|Guitar|Bass|Drums|Keyboard|Percussion)[\.\-]?.*?[）\)\]】]', '', artist_name, flags=re.IGNORECASE)
+        
+        artist_name = artist_name.strip()
+        
+        # フィルタリング: アーティスト名として明らかに不適切なものをスキップ
+        if not artist_name or len(artist_name) <= 1: continue
+        
+        # スキップキーワード（楽器単体、会場系、宣伝系）
+        skip_keywords = [
+            'チケット', '予約', '詳細はこちら', 'http', '公式HP', '※', 'お問い合わせ', 
+            'STAGE', 'HALL', 'LIVEHOUSE', 'LOFT', 'SHELTER', 'ERA', 'MOSAiC', '251',
+            '整理番号', 'ドリンク代', '再入場', '配信', 'アーカイブ'
+        ]
+        if any(k.lower() in artist_name.lower() for k in skip_keywords): continue
+        
+        # 楽器編成だけの文字列をスキップ
+        if re.match(r'^(Vo|Gt|Ba|Dr|Key|Per|Syn|Vj|DJ|Cho)[\.\-]?$', artist_name, re.IGNORECASE): continue
+
         artist = db_session.query(Artist).filter(Artist.name == artist_name).first()
+
         video_id = None
         report = pending_reports.get(artist_name) if pending_reports else None
 
-        # 1. 報告あり (Priority 1)
-        if report and youtube_fetch_count < DAILY_FETCH_LIMIT:
+        # 0.5 公式チャンネルが登録されている場合 (Priority 0.5 - 現在の最優先)
+        # チャンネルIDがある場合は、報告の有無に関わらずそのチャンネル内から最新を探す。
+        if artist and artist.official_channel_id and not only_cache:
+            is_stale = not artist.youtube_updated_at or (datetime.now() - artist.youtube_updated_at) > timedelta(days=30)
+            if (is_stale or report) and youtube_fetch_count < DAILY_FETCH_LIMIT:
+                exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid] if artist.reported_video_ids else []
+                # チャンネル内から検索
+                video_id = search_artist_video(artist_name, exclude_ids=exclude_ids, channel_id=artist.official_channel_id)
+                youtube_fetch_count += 1
+                
+                artist.youtube_video_id = video_id
+                artist.youtube_updated_at = datetime.now()
+                artist.is_reported = False
+                
+                if report:
+                    db_session.query(VideoReport).filter(
+                        VideoReport.artist_name == artist_name,
+                        VideoReport.status == 'pending'
+                    ).update({"status": "resolved"})
+                
+                try:
+                    db_session.commit()
+                    print(f"[YouTube][Channel Sync] {artist_name} from channel {artist.official_channel_id} → {video_id}")
+                except Exception as db_err:
+                    db_session.rollback()
+                    print(f"[YouTube] Error updating channel-based artist {artist_name}: {db_err}")
+            else:
+                video_id = artist.youtube_video_id
+
+        # 1. 報告あり (Priority 1) - チャンネル指定がない場合
+        elif report and youtube_fetch_count < DAILY_FETCH_LIMIT and not only_cache:
             exclude_ids = []
             if artist and artist.reported_video_ids:
                 exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid]
@@ -172,7 +320,7 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
                 print(f"[YouTube] Error updating reported artist {artist_name}: {db_err}")
 
         # 2. 新規 or 期限切れ (90日)
-        elif (not artist or not artist.youtube_updated_at or (datetime.now() - artist.youtube_updated_at) > timedelta(days=90)):
+        elif (not artist or not artist.youtube_updated_at or (datetime.now() - artist.youtube_updated_at) > timedelta(days=90)) and not only_cache:
             if youtube_fetch_count < DAILY_FETCH_LIMIT:
                 exclude_ids = []
                 if artist and artist.reported_video_ids:
@@ -446,51 +594,24 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
             try:
                 # Get artist/video data
                 artist_info_list, youtube_fetch_count = get_artist_video_info(
-                    db_session, performers_str, youtube_fetch_count, pending_reports
+                    db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True
                 )
 
-                # Upsert event
-                existing_event = db_session.query(Event).filter(
-                    Event.livehouse_id == livehouse_id,
-                    Event.date == found_date.date(),
-                    Event.title == title
-                ).first()
+                # Prepare event data for upsert
+                event_data = {
+                    'title': title,
+                    'date': found_date.date(),
+                    'performers': performers_str,
+                    'open_time': open_time,
+                    'start_time': start_time,
+                    'price_info': price_info,
+                    'ticket_url': ticket_url,
+                    'is_midnight': is_midnight,
+                    'artists_data': artist_info_list,
+                    'image_url': image_url
+                }
                 
-                if existing_event:
-                    existing_event.performers = performers_str
-                    existing_event.open_time = open_time
-                    existing_event.start_time = start_time
-                    existing_event.price_info = price_info
-                    existing_event.ticket_url = ticket_url
-                    existing_event.is_midnight = is_midnight
-                    existing_event.artists_data = artist_info_list
-                    existing_event.image_url = image_url
-                    
-                    is_p, p_t = determine_pickup_status(performers_str, existing_event.bookmark_count, existing_event.is_pickup, existing_event.pickup_type)
-                    existing_event.is_pickup = is_p
-                    existing_event.pickup_type = p_t
-                    print(f"[{venue_name}] Updated: {title}")
-                else:
-                    is_p, p_t = determine_pickup_status(performers_str)
-                    new_event = Event(
-                        livehouse_id=livehouse_id,
-                        date=found_date.date(),
-                        title=title,
-                        performers=performers_str,
-                        open_time=open_time,
-                        start_time=start_time,
-                        price_info=price_info,
-                        ticket_url=ticket_url,
-                        is_pickup=is_p,
-                        pickup_type=p_t,
-                        is_midnight=is_midnight,
-                        artists_data=artist_info_list,
-                        image_url=image_url
-                    )
-                    db_session.add(new_event)
-                    print(f"[{venue_name}] Added: {title}")
-                
-                db_session.commit()
+                upsert_event(db_session, event_data, livehouse_id)
 
             except Exception as e:
                 db_session.rollback()
@@ -657,51 +778,23 @@ async def scrape_era_events(page, db_session, youtube_fetch_count: int, pending_
 
             # Artist Video Data
             artist_info_list, youtube_fetch_count = get_artist_video_info(
-                db_session, performers_str, youtube_fetch_count, pending_reports
+                db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True
             )
 
-            # Upsert
-            existing_event = db_session.query(Event).filter(
-                Event.livehouse_id == livehouse_id,
-                Event.date == found_date.date(),
-                Event.title == title
-            ).first()
-
-            if existing_event:
-                existing_event.performers = performers_str
-                existing_event.open_time = open_time
-                existing_event.start_time = start_time
-                existing_event.price_info = price_info
-                existing_event.ticket_url = ticket_url
-                existing_event.is_midnight = is_midnight
-                existing_event.artists_data = artist_info_list
-                existing_event.image_url = image_url
-                
-                is_p, p_t = determine_pickup_status(performers_str, existing_event.bookmark_count, existing_event.is_pickup, existing_event.pickup_type)
-                existing_event.is_pickup = is_p
-                existing_event.pickup_type = p_t
-                print(f"[{venue_name}] Updated: {title}")
-            else:
-                is_p, p_t = determine_pickup_status(performers_str)
-                new_event = Event(
-                    livehouse_id=livehouse_id,
-                    date=found_date.date(),
-                    title=title,
-                    performers=performers_str,
-                    open_time=open_time,
-                    start_time=start_time,
-                    price_info=price_info,
-                    ticket_url=ticket_url,
-                    is_pickup=is_p,
-                    pickup_type=p_t,
-                    is_midnight=is_midnight,
-                    artists_data=artist_info_list,
-                    image_url=image_url
-                )
-                db_session.add(new_event)
-                print(f"[{venue_name}] Added: {title}")
-            
-            db_session.commit()
+            # Prepare event data for upsert
+            event_data = {
+                'title': title,
+                'date': found_date.date(),
+                'performers': performers_str,
+                'open_time': open_time,
+                'start_time': start_time,
+                'price_info': price_info,
+                'ticket_url': ticket_url,
+                'is_midnight': is_midnight,
+                'artists_data': artist_info_list,
+                'image_url': image_url
+            }
+            upsert_event(db_session, event_data, livehouse_id)
 
         except Exception as ie:
             print(f"[{venue_name}] Error in item loop: {ie}")
@@ -814,51 +907,23 @@ async def scrape_mosaic_events(page, db_session, youtube_fetch_count, pending_re
 
             # Video Data
             artist_info_list, youtube_fetch_count = get_artist_video_info(
-                db_session, performers_str, youtube_fetch_count, pending_reports
+                db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True
             )
 
-            # Upsert
-            existing_event = db_session.query(Event).filter(
-                Event.livehouse_id == livehouse_id,
-                Event.date == found_date.date(),
-                Event.title == title
-            ).first()
-
-            if existing_event:
-                existing_event.performers = performers_str
-                existing_event.open_time = open_time
-                existing_event.start_time = start_time
-                existing_event.price_info = price_info
-                existing_event.ticket_url = ticket_url
-                existing_event.is_midnight = is_midnight
-                existing_event.artists_data = artist_info_list
-                existing_event.image_url = image_url
-                
-                is_p, p_t = determine_pickup_status(performers_str, existing_event.bookmark_count, existing_event.is_pickup, existing_event.pickup_type)
-                existing_event.is_pickup = is_p
-                existing_event.pickup_type = p_t
-                print(f"[{venue_name}] Updated: {title}")
-            else:
-                is_p, p_t = determine_pickup_status(performers_str)
-                new_event = Event(
-                    livehouse_id=livehouse_id,
-                    date=found_date.date(),
-                    title=title,
-                    performers=performers_str,
-                    open_time=open_time,
-                    start_time=start_time,
-                    price_info=price_info,
-                    ticket_url=ticket_url,
-                    is_pickup=is_p,
-                    pickup_type=p_t,
-                    is_midnight=is_midnight,
-                    artists_data=artist_info_list,
-                    image_url=image_url
-                )
-                db_session.add(new_event)
-                print(f"[{venue_name}] Added: {title}")
-            
-            db_session.commit()
+            # Prepare event data for upsert
+            event_data = {
+                'title': title,
+                'date': found_date.date(),
+                'performers': performers_str,
+                'open_time': open_time,
+                'start_time': start_time,
+                'price_info': price_info,
+                'ticket_url': ticket_url,
+                'is_midnight': is_midnight,
+                'artists_data': artist_info_list,
+                'image_url': image_url
+            }
+            upsert_event(db_session, event_data, livehouse_id)
 
         except Exception as ie:
             print(f"[{venue_name}] Error in item loop: {ie}")
@@ -991,51 +1056,23 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
 
             # Video Data
             artist_info_list, youtube_fetch_count = get_artist_video_info(
-                db_session, performers_str, youtube_fetch_count, pending_reports
+                db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True
             )
 
-            # Upsert
-            existing_event = db_session.query(Event).filter(
-                Event.livehouse_id == livehouse_id,
-                Event.date == found_date.date(),
-                Event.title == title
-            ).first()
-
-            if existing_event:
-                existing_event.performers = performers_str
-                existing_event.open_time = open_time
-                existing_event.start_time = start_time
-                existing_event.price_info = price_info
-                existing_event.ticket_url = ticket_url
-                existing_event.is_midnight = is_midnight
-                existing_event.artists_data = artist_info_list
-                existing_event.image_url = image_url
-                
-                is_p, p_t = determine_pickup_status(performers_str, existing_event.bookmark_count, existing_event.is_pickup, existing_event.pickup_type)
-                existing_event.is_pickup = is_p
-                existing_event.pickup_type = p_t
-                print(f"[{venue_name}] Updated: {title}")
-            else:
-                is_p, p_t = determine_pickup_status(performers_str)
-                new_event = Event(
-                    livehouse_id=livehouse_id,
-                    date=found_date.date(),
-                    title=title,
-                    performers=performers_str,
-                    open_time=open_time,
-                    start_time=start_time,
-                    price_info=price_info,
-                    ticket_url=ticket_url,
-                    is_pickup=is_p,
-                    pickup_type=p_t,
-                    is_midnight=is_midnight,
-                    artists_data=artist_info_list,
-                    image_url=image_url
-                )
-                db_session.add(new_event)
-                print(f"[{venue_name}] Added: {title}")
-            
-            db_session.commit()
+            # Prepare event data for upsert
+            event_data = {
+                'title': title,
+                'date': found_date.date(),
+                'performers': performers_str,
+                'open_time': open_time,
+                'start_time': start_time,
+                'price_info': price_info,
+                'ticket_url': ticket_url,
+                'is_midnight': is_midnight,
+                'artists_data': artist_info_list,
+                'image_url': image_url
+            }
+            upsert_event(db_session, event_data, livehouse_id)
 
         except Exception as ie:
             print(f"[{venue_name}] Error in item loop: {ie}")
@@ -1044,9 +1081,91 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
     return youtube_fetch_count
 
 
+
+def sync_prioritized_artist_videos(db_session, youtube_fetch_count: int) -> int:
+    """
+    開催日が近いイベントの出演者を優先してYouTube動画を取得・同期する。
+    1. 本日以降の全イベントを取得
+    2. 未取得・期限切れアーティストを抽出
+    3. 開催日順にソートしてYouTube APIを実行
+    4. 取得した動画IDをEvent.artists_dataに反映
+    """
+    print("\n[Sync] Starting prioritized artist video sync...")
+    jst = timezone(timedelta(hours=9))
+    today = datetime.now(jst).date()
+    
+    # 本日以降の公開イベントを取得（日付順）
+    upcoming_events = db_session.query(Event).filter(
+        Event.status == 'published',
+        Event.date >= today
+    ).order_by(Event.date.asc()).all()
+    
+    if not upcoming_events:
+        print("[Sync] No upcoming events found.")
+        return youtube_fetch_count
+
+    # アーティストごとに「最初に出演する日」をマッピング
+    artist_priority = {} # { artist_name: min_date }
+    artist_events = {}   # { artist_name: [event_objects] }
+    
+    for event in upcoming_events:
+        if not event.performers:
+            continue
+        # get_artist_video_infoと同じロジックで分割
+        names = [a.strip() for a in re.split(r'[、,／/\n]', event.performers) if a.strip()]
+        for name in names:
+            if name not in artist_priority:
+                artist_priority[name] = event.date
+                artist_events[name] = []
+            artist_events[name].append(event)
+
+    # 取得が必要なアーティストを特定
+    # 優先順位: 1. 開催日が近い順
+    sorted_artists = sorted(artist_priority.keys(), key=lambda x: artist_priority[x])
+    
+    # 報告済みアーティストを最優先に差し込む
+    pending_reports_list = db_session.query(VideoReport).filter(VideoReport.status == 'pending').all()
+    reported_names = {r.artist_name for r in pending_reports_list}
+    sorted_artists = [n for n in sorted_artists if n in reported_names] + [n for n in sorted_artists if n not in reported_names]
+
+    # 報告リストをDict化
+    pending_reports_dict = {r.artist_name: r for r in pending_reports_list}
+
+    for artist_name in sorted_artists:
+        if youtube_fetch_count >= DAILY_FETCH_LIMIT:
+            print(f"[Sync] DAILY_FETCH_LIMIT ({DAILY_FETCH_LIMIT}) reached. Stopping.")
+            break
+            
+        result_list, new_fetch_count = get_artist_video_info(
+            db_session, artist_name, youtube_fetch_count, pending_reports_dict, only_cache=False
+        )
+        
+        if new_fetch_count > youtube_fetch_count or (result_list and result_list[0]['youtube_id']):
+            video_id = result_list[0]['youtube_id']
+            for ev in artist_events[artist_name]:
+                current_data = ev.artists_data or []
+                updated = False
+                for item in current_data:
+                    if item['name'] == artist_name:
+                        if item.get('youtube_id') != video_id:
+                            item['youtube_id'] = video_id
+                            updated = True
+                
+                if updated:
+                    from sqlalchemy.orm.attributes import flag_modified
+                    ev.artists_data = list(current_data)
+                    flag_modified(ev, "artists_data")
+            
+            db_session.commit()
+            youtube_fetch_count = new_fetch_count
+
+    print(f"[Sync] Completed. Total fetch this run: {youtube_fetch_count}")
+    return youtube_fetch_count
+
 async def async_run_all_scrapers():
     # Handle JST time (+9h from UTC)
-    now_jst = datetime.utcnow() + timedelta(hours=9)
+    run_start_time = datetime.now(timezone.utc)
+    now_jst = run_start_time + timedelta(hours=9)
     today = now_jst
     tomorrow = now_jst + timedelta(days=1)
     
@@ -1162,9 +1281,43 @@ async def async_run_all_scrapers():
         finally:
             db_251.close()
                 
+        
+        # --- Sync Prioritized Videos ---
+        db_sync = SessionLocal()
+        try:
+            youtube_fetch_count = sync_prioritized_artist_videos(db_sync, youtube_fetch_count)
+        finally:
+            db_sync.close()
+
         await browser.close()
 
+
     print(f"\n[完了] 本日のYouTube取得数: {youtube_fetch_count}件 / 上限{DAILY_FETCH_LIMIT}件")
+
+    
+
+    
+
+
+    # --- Cleanup logic (Mark disappeared events as cancelled) ---
+    now_jst = datetime.now(timezone(timedelta(hours=9)))
+    yesterday_jst = now_jst - timedelta(days=1)
+    db_cleanup = SessionLocal()
+    try:
+        cancelled_count = db_cleanup.query(Event).filter(
+            Event.date >= yesterday_jst.date(),
+            Event.date <= (now_jst + timedelta(days=45)).date(),
+            Event.last_scraped_at < run_start_time,
+            Event.status == 'published'
+        ).update({"status": "cancelled"}, synchronize_session=False)
+        db_cleanup.commit()
+        if cancelled_count > 0:
+            print(f"[Cleanup] サイトから消えた {cancelled_count} 件のイベントを 'cancelled' に設定しました。")
+    except Exception as cleanup_err:
+        print(f"[Cleanup] Error marking cancelled events: {cleanup_err}")
+        db_cleanup.rollback()
+    finally:
+        db_cleanup.close()
 
 def run_all_scrapers():
     """Wrapper to run the async scraper synchronously."""

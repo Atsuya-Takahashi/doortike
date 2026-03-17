@@ -13,6 +13,7 @@ class Artist(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     youtube_video_id = Column(String, nullable=True)
+    official_channel_id = Column(String, nullable=True) # 公式チャンネルを紐付け、最新動画を動的取得するための項目
     youtube_updated_at = Column(DateTime, nullable=True)
     is_reported = Column(Boolean, default=False)
     reported_video_ids = Column(String, nullable=True)  # カンマ区切りで報告済み動画IDを蓄積
@@ -55,6 +56,8 @@ class Event(Base):
     artists_data = Column(JSON, nullable=True)  # Store list of performers with their youtube_id: [{"name": "...", "youtube_id": "..."}]
     image_url = Column(String, nullable=True)
     bookmark_count = Column(Integer, default=0, nullable=False)
+    last_scraped_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String, default='published') # 'published', 'cancelled'
     
     livehouse = relationship("LiveHouse", back_populates="events")
     reports = relationship("VideoReport", back_populates="event")

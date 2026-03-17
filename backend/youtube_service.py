@@ -15,7 +15,7 @@ YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 from typing import Optional, List
 
-def search_artist_video(artist_name: str, exclude_ids: List[str] = [], suffix: Optional[str] = None) -> Optional[str]:
+def search_artist_video(artist_name: str, exclude_ids: List[str] = [], suffix: Optional[str] = None, channel_id: Optional[str] = None) -> Optional[str]:
     """
     アーティスト名でYouTube検索し、最適な動画IDを返す。
     fallback: MVでヒットしなければ official mv で再試行。
@@ -35,14 +35,18 @@ def search_artist_video(artist_name: str, exclude_ids: List[str] = [], suffix: O
         artist_lower = artist_name.lower()
 
         for s in suffixes:
-            request = youtube.search().list(
-                part="snippet",
-                q=f"{artist_name} {s}",
-                type="video",
-                maxResults=5,
-                videoEmbeddable="true",
-                publishedAfter=published_after
-            )
+            search_params = {
+                "part": "snippet",
+                "q": f"{artist_name} {s}",
+                "type": "video",
+                "maxResults": 5,
+                "videoEmbeddable": "true",
+                "publishedAfter": published_after
+            }
+            if channel_id:
+                search_params["channelId"] = channel_id
+
+            request = youtube.search().list(**search_params)
             response = request.execute()
             items = response.get("items", [])
 

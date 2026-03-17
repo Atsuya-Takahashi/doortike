@@ -2,8 +2,8 @@ name: Daily Livehouse Scraper
 
 on:
   schedule:
-    # 毎日 日本時間の 04:00 と 16:00 に実行 (UTC基準のため 19:00 と 07:00 を設定)
-    - cron: '0 19,7 * * *'
+    # 毎日 日本時間の 04:00 に実行 (UTC基準のため 19:00 を設定)
+    - cron: '0 19 * * *'
   workflow_dispatch:
     # GitHub画面上から手動で実行できるようにするボタン設定
 

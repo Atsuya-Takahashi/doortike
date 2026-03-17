@@ -5,6 +5,8 @@ import { auth, db, googleProvider, appleProvider } from './firebase'
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'
 import { supabase } from './lib/supabase'
+import ReactGA from "react-ga4"
+import { useInView } from 'react-intersection-observer'
 import './App.css'
 
 function App() {
@@ -239,6 +241,7 @@ function App() {
             *,
             livehouse:livehouses!inner(*)
           `)
+          .eq('status', 'published')
 
         if (isSelectedDateRealToday && realToday.getHours() < 4) {
           // Fetch both today and yesterday
@@ -607,11 +610,68 @@ function App() {
     }
   }
 
-  const renderEventCard = (evt) => {
+  const EventCard = ({ evt, area, position }) => {
     if (!evt || !evt.livehouse) return null;
     const happening = isEventHappening(evt);
+    
+    // GA4 Tracking Logic
+    const eventLabel = `${evt.date}_${evt.livehouse.name}_${evt.title}`;
+    const { ref, inView } = useInView({ triggerOnce: true, threshold: 0.1 });
+
+    useEffect(() => {
+      if (inView) {
+        console.log("GA4 Impression:", eventLabel);
+        ReactGA.event({
+          category: "EventCard",
+          action: "Impression",
+          label: eventLabel,
+          area: area,
+          position: position,
+          is_pr: evt.is_pr || false
+        });
+      }
+    }, [inView, eventLabel, area, position, evt.is_pr]);
+
+    const handleVideoClick = (perfInfo) => {
+      console.log("GA4 Play_Video:", perfInfo.name);
+      ReactGA.event({
+        category: "Engagement",
+        action: "Play_Video",
+        label: eventLabel,
+        artist: perfInfo.name,
+        area: area,
+        position: position
+      });
+      
+      setVideoModal({ 
+        artistName: perfInfo.name, 
+        loading: false, 
+        videoId: perfInfo.youtube_id, 
+        reported: reportedVideos.includes(perfInfo.name), 
+        eventId: evt.id,
+        ticketUrl: evt.ticket_url || null 
+      });
+    };
+
+    const handleTicketClick = () => {
+      console.log("GA4 Click_Ticket:", eventLabel);
+      ReactGA.event({
+        category: "Conversion",
+        action: "Click_Ticket",
+        label: eventLabel,
+        area: area,
+        position: position,
+        is_pr: evt.is_pr || false
+      });
+    };
+
     return (
-      <div className={`glass-panel event-card ${evt.is_pr ? 'pr-card' : ''} ${evt.pickup_type === 'staff' && !evt.is_pr ? 'staff-pick-card' : ''} ${happening ? 'is-happening' : ''}`} key={evt.id} style={{ display: 'flex', flexDirection: 'row', overflow: 'visible', padding: 0, position: 'relative' }}>
+      <div 
+        ref={ref}
+        className={`glass-panel event-card ${evt.is_pr ? 'pr-card' : ''} ${evt.pickup_type === 'staff' && !evt.is_pr ? 'staff-pick-card' : ''} ${happening ? 'is-happening' : ''}`} 
+        key={evt.id} 
+        style={{ display: 'flex', flexDirection: 'row', overflow: 'visible', padding: 0, position: 'relative' }}
+      >
           {/* Status Badges */}
           <div className="card-badge-container">
             {(evt.pickup_type === 'hot' || (evt.bookmark_count >= 5)) && <span className="card-badge hot-badge"><Flame size={12} style={{marginRight: '2px'}} /> HOT</span>}
@@ -692,7 +752,10 @@ function App() {
                 href={evt.ticket_url || `https://www.google.com/search?q=${encodeURIComponent(`${evt.livehouse.name} ${evt.title} チケット`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleTicketClick();
+                }}
                 className="event-link"
                 title={evt.ticket_url ? "チケット購入（外部サイト）" : "チケットを検索（Google）"}
               >
@@ -740,16 +803,7 @@ function App() {
                     {perfInfo.youtube_id ? (
                       <span
                         className="performer-link"
-                        onClick={() => {
-                          setVideoModal({ 
-                            artistName: perfInfo.name, 
-                            loading: false, 
-                            videoId: perfInfo.youtube_id, 
-                            reported: reportedVideos.includes(perfInfo.name), 
-                            eventId: evt.id,
-                            ticketUrl: evt.ticket_url || null 
-                          });
-                        }}
+                        onClick={() => handleVideoClick(perfInfo)}
                       >
                         {perfInfo.name}
                       </span>
@@ -1514,7 +1568,9 @@ function App() {
                   {format(selectedDate, 'M月d日')}（{['日', '月', '火', '水', '木', '金', '土'][selectedDate.getDay()]}）のイベント
                 </div>
               )}
-              {groups.todayRegular.map(renderEventCard)}
+              {groups.todayRegular.map((evt, index) => (
+                <EventCard key={evt.id} evt={evt} area={evt.livehouse.area} position={index + 1} />
+              ))}
 
               {/* Today Midnight */}
               {groups.todayMidnight.length > 0 && (
@@ -1523,7 +1579,22 @@ function App() {
                     <Moon size={16} fill="var(--accent-color)" color="var(--accent-color)" />
                     {format(selectedDate, 'M月d日')}（{['日', '月', '火', '水', '木', '金', '土'][selectedDate.getDay()]}）深夜のイベント
                   </div>
-                  {groups.todayMidnight.map(renderEventCard)}
+                  {groups.todayMidnight.map((evt, index) => (
+                    <EventCard key={evt.id} evt={evt} area={evt.livehouse.area} position={groups.todayRegular.length + index + 1} />
+                  ))}
+                </>
+              )}
+
+              {/* Tomorrow Events */}
+              {groups.tomorrowEvents.length > 0 && (
+                <>
+                  <div className="list-sub-header">
+                    <Calendar size={16} fill="var(--accent-color)" color="var(--accent-color)" />
+                    明日のイベント
+                  </div>
+                  {groups.tomorrowEvents.map((evt, index) => (
+                    <EventCard key={evt.id} evt={evt} area={evt.livehouse.area} position={index + 1} />
+                  ))}
                 </>
               )}
 
