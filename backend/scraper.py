@@ -269,15 +269,21 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
                 video_id = search_artist_video(artist_name, exclude_ids=exclude_ids, channel_id=artist.official_channel_id)
                 youtube_fetch_count += 1
                 
-                artist.youtube_video_id = video_id
-                artist.youtube_updated_at = datetime.now()
-                artist.is_reported = False
-                
                 if report:
                     db_session.query(VideoReport).filter(
                         VideoReport.artist_name == artist_name,
                         VideoReport.status == 'pending'
                     ).update({"status": "resolved"})
+                
+                # 報告時、以前のIDをブラックリストに追加
+                if report and artist.youtube_video_id and artist.youtube_video_id != video_id:
+                    reported_ids = set([vid for vid in (artist.reported_video_ids or "").split(",") if vid])
+                    reported_ids.add(artist.youtube_video_id)
+                    artist.reported_video_ids = ",".join(reported_ids)
+                
+                artist.youtube_video_id = video_id
+                artist.youtube_updated_at = datetime.now()
+                artist.is_reported = False
                 
                 try:
                     db_session.commit()
@@ -308,6 +314,12 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
                 artist = Artist(name=artist_name)
                 db_session.add(artist)
             
+            # 報告時、以前のIDをブラックリストに追加
+            if artist.youtube_video_id and artist.youtube_video_id != video_id:
+                reported_ids = set([vid for vid in (artist.reported_video_ids or "").split(",") if vid])
+                reported_ids.add(artist.youtube_video_id)
+                artist.reported_video_ids = ",".join(reported_ids)
+
             artist.youtube_video_id = video_id
             artist.youtube_updated_at = datetime.now()
             artist.is_reported = False
