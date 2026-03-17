@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { format, addDays } from 'date-fns'
-import { MapPin, Clock, Heart, Bookmark, Calendar, ChevronRight, ChevronDown, Activity, BookOpen, Ticket, X, CheckCircle, CreditCard, ArrowUp, ArrowDown, User, ExternalLink, ArrowUpRight, Moon, Sun, Briefcase, Plane, Zap, Flame, Lock, Flag } from 'lucide-react'
+import { MapPin, Clock, Heart, Bookmark, Calendar, ChevronRight, ChevronDown, Activity, BookOpen, Ticket, X, CheckCircle, CreditCard, ArrowUp, ArrowDown, User, ExternalLink, ArrowUpRight, Moon, Sun, Briefcase, Plane, Zap, Flame, Lock, Flag, PlusSquare, Share, Download, Smartphone } from 'lucide-react'
 import { auth, db, googleProvider, appleProvider } from './firebase'
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'
@@ -85,6 +85,24 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [videoModal, setVideoModal] = useState(null) // { artistName, loading, videoId, reported, eventId, ticketUrl, isConfirming }
 
+  // PWA Install states
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  // Platform detection
+  const isIOS = useMemo(() => {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  }, []);
+
+  const isSafari = useMemo(() => {
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  }, []);
+
+  const isStandalone = useMemo(() => {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  }, []);
+
+
   // Save to localStorage
   useEffect(() => {
     localStorage.setItem('likedVenues', JSON.stringify(likedVenues))
@@ -143,6 +161,15 @@ function App() {
     
     const urlFree = params.get('free');
     if (urlFree === 'true') setShowOnlyFree(true);
+
+    // PWA Install prompt listener
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     // Hardcoded areas dict to replace the backend API
     setAreasDict({
@@ -687,6 +714,17 @@ function App() {
     }
   }, [isDropdownOpen])
 
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    }
+    setDeferredPrompt(null);
+    setIsInstallable(false);
+  };
+
   const isEventBookmarked = (id) => bookmarkedEvents.some(b => b.id === id)
 
   // Handle late-night events: if it's before 4 AM, "today" should be the previous calendar day.
@@ -1074,26 +1112,59 @@ function App() {
                 </div>
               </button>
             </div>
-            <h1 style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%', gap: '6px', margin: 0, padding: 0 }}>
-              <img 
-                src="/assets/logo.png" 
-                alt="ドアチケ" 
-                style={{ 
-                  height: '48px', 
-                  width: 'auto', 
-                  display: 'block',
-                  cursor: 'pointer'
-                }} 
-                onClick={() => navigateTo('/')}
-              />
+            <h1 style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%', gap: '6px', margin: 0, padding: 0, position: 'relative' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <img 
+                  src="/assets/logo.png" 
+                  alt="ドアチケ" 
+                  style={{ 
+                    height: '48px', 
+                    width: 'auto', 
+                    display: 'block',
+                    cursor: 'pointer'
+                  }} 
+                  onClick={() => setIsAboutModalOpen(true)}
+                />
+                {!isStandalone && isInstallable && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (deferredPrompt) {
+                        handleInstallClick();
+                      } else {
+                        setIsAboutModalOpen(true);
+                      }
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: '-45px',
+                      background: 'var(--accent-color)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '4px 8px',
+                      fontSize: '0.6rem',
+                      fontWeight: 'bold',
+                      animation: 'pulse 2s infinite',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    INSTALL
+                  </button>
+                )}
+              </div>
               <span style={{ 
                 margin: 0, 
                 fontSize: '0.7rem', 
                 fontWeight: '600', 
                 color: 'var(--text-secondary)',
                 letterSpacing: '0.1em',
-                opacity: 0.7
-              }}>
+                opacity: 0.7,
+                cursor: 'pointer'
+              }}
+              onClick={() => setIsAboutModalOpen(true)}
+              >
                 ドアチケ
               </span>
             </h1>
@@ -1938,6 +2009,47 @@ function App() {
                   </p>
                 </div>
               </div>
+
+              {/* PWA Installation Guide Section (Improved) */}
+              {!isStandalone && (
+                <div style={{ marginTop: '48px', padding: '24px', borderRadius: '16px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--control-border)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+                  <h3 style={{ fontSize: '1.2rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '800', color: 'var(--accent-color)' }}>
+                    <Smartphone size={24} /> ホーム画面に追加して使う
+                  </h3>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.6' }}>
+                    ドアチケをホーム画面に追加すると、ブラウザの枠が消え、フルスクリーンのアプリとして快適に利用できます。
+                  </p>
+
+                  {isInstallable && deferredPrompt ? (
+                    <div style={{ textAlign: 'center' }}>
+                      <button 
+                        className="primary-btn" 
+                        onClick={handleInstallClick}
+                        style={{ width: '100%', height: '54px', borderRadius: '12px', fontSize: '1.1rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                      >
+                        <Download size={20} /> アプリをインストールする
+                      </button>
+                    </div>
+                  ) : isIOS && isSafari ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px dashed var(--control-border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{ background: 'var(--accent-color)', color: 'white', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.8rem', fontWeight: 'bold' }}>1</div>
+                        <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>Safari下の <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', fontSize: '0.8rem' }}>📤 共有ボタン</span> をタップ</p>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{ background: 'var(--accent-color)', color: 'white', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.8rem', fontWeight: 'bold' }}>2</div>
+                        <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>メニューから <span style={{ fontWeight: 'bold' }}>「ホーム画面に追加」</span> を選択<br/><span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>※下の方に隠れている場合があります</span></p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px dashed var(--control-border)' }}>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', textAlign: 'center', lineHeight: '1.5' }}>
+                        ブラウザメニューの<br/><strong>「ホーム画面に追加」</strong>または<strong>「インストール」</strong><br/>からアプリとして追加できます。
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <button
                 className="primary-btn"
