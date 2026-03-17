@@ -620,7 +620,6 @@ function App() {
 
     useEffect(() => {
       if (inView) {
-        console.log("GA4 Impression:", eventLabel);
         ReactGA.event({
           category: "EventCard",
           action: "Impression",
@@ -633,7 +632,6 @@ function App() {
     }, [inView, eventLabel, area, position, evt.is_pr]);
 
     const handleVideoClick = (perfInfo) => {
-      console.log("GA4 Play_Video:", perfInfo.name);
       ReactGA.event({
         category: "Engagement",
         action: "Play_Video",
@@ -654,7 +652,6 @@ function App() {
     };
 
     const handleTicketClick = () => {
-      console.log("GA4 Click_Ticket:", eventLabel);
       ReactGA.event({
         category: "Conversion",
         action: "Click_Ticket",
