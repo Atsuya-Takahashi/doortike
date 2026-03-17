@@ -429,6 +429,11 @@ function App() {
     setVideoModal(prev => ({ ...prev, reported: true, isConfirming: false }));
     setIsReporting(true);
 
+    // Persist locally so it can't be replayed on this terminal, even if sync fails
+    if (!reportedVideos.includes(videoModal.artistName)) {
+      setReportedVideos(prev => [...prev, videoModal.artistName]);
+    }
+
     try {
       const { error } = await supabase
         .rpc('report_video', { 
@@ -437,11 +442,6 @@ function App() {
         })
 
       if (error) throw error;
-
-      // Persist locally so it can't be replayed on this terminal
-      if (!reportedVideos.includes(videoModal.artistName)) {
-        setReportedVideos(prev => [...prev, videoModal.artistName]);
-      }
     } catch (error) {
       console.error("Error reporting video:", error)
       // Even if network fails, we keep it hidden for UX, but alert the user once
