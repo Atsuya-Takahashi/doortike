@@ -171,11 +171,15 @@
   transition: all 0.2s;
   white-space: nowrap;
 }
+.dropdown-toggle:hover {
+  background: rgba(30, 58, 138, 0.1);
+  color: var(--accent-color);
+}
 
 .dropdown-toggle:focus {
   outline: none;
   border-color: var(--accent-color);
-  box-shadow: 0 0 0 2px rgba(255, 51, 102, 0.2);
+  box-shadow: 0 0 0 2px rgba(30, 58, 138, 0.2);
 }
 
 .dropdown-menu {
@@ -219,14 +223,14 @@
 }
 
 .dropdown-item:hover {
-  background: rgba(255, 51, 102, 0.1);
+  background: rgba(30, 58, 138, 0.1);
   color: var(--accent-color);
 }
 
 .dropdown-item.selected {
   font-weight: bold;
   color: var(--accent-color);
-  background: rgba(255, 51, 102, 0.05);
+  background: rgba(30, 58, 138, 0.05);
 }
 
 /* Section Title */
@@ -949,16 +953,16 @@
 }
 
 .filter-toggle-btn:hover {
-  background: rgba(255, 51, 102, 0.1);
+  background: rgba(30, 58, 138, 0.1);
   color: var(--accent-color);
-  border-color: rgba(255, 51, 102, 0.3);
+  border-color: rgba(30, 58, 138, 0.3);
 }
 
 .filter-toggle-btn.active {
   background: var(--accent-color);
   color: white;
   border-color: var(--accent-color);
-  box-shadow: 0 4px 12px rgba(255, 51, 102, 0.3);
+  /* Removed box-shadow for a cleaner, flatter look */
 }
 
 .free-filter {
@@ -1032,13 +1036,13 @@
   border: none;
   cursor: pointer;
   margin-top: 10px;
-  box-shadow: 0 4px 12px rgba(255, 51, 102, 0.3);
+  /* Removed box-shadow for consistency */
   transition: all 0.2s;
 }
 
 .auth-submit-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(255, 51, 102, 0.4);
+  /* Removed box-shadow for consistency */
 }
 
 /* About Modal Redesign */
