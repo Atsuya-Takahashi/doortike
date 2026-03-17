@@ -184,6 +184,70 @@ function App() {
     }
   }, [])
 
+  // SEO: Dynamic Title, Meta Description and JSON-LD
+  useEffect(() => {
+    const areaPath = selectedArea === 'All' ? selectedPrefecture : selectedArea;
+    const dateStr = format(selectedDate, 'M月d日');
+    const newTitle = `${areaPath}の${dateStr}のライブ情報 - ドアチケ`;
+    document.title = newTitle;
+
+    // Update meta description dynamically for more relevance
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) {
+      metaDesc.setAttribute('content', `${areaPath}の${dateStr}のライブ情報・当日券情報を網羅。出演アーティストの動画をチェックして、今すぐライブハウスへ。`);
+    }
+
+    // JSON-LD for Events (Google Event Search)
+    const scriptId = 'json-ld-events';
+    let script = document.getElementById(scriptId);
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.type = 'application/ld+json';
+      document.head.appendChild(script);
+    }
+
+    // Only include published events for JSON-LD
+    const publishedEvents = (events || []).filter(e => e.status === 'published' || !e.status).slice(0, 20); // Limit to 20 for performance
+    const jsonLdData = publishedEvents.map(evt => {
+      if (!evt || !evt.event_date || !evt.livehouse) return null;
+      try {
+        const dateObj = new Date(evt.event_date);
+        if (isNaN(dateObj.getTime())) return null;
+
+        return {
+          "@context": "https://schema.org",
+          "@type": "Event",
+          "name": evt.title || "Unknown Event",
+          "startDate": `${format(dateObj, 'yyyy-MM-dd')}T${evt.open_time || '19:00'}`,
+          "location": {
+            "@type": "Place",
+            "name": evt.livehouse.name,
+            "address": {
+              "@type": "PostalAddress",
+              "addressLocality": evt.livehouse.area || "",
+              "addressRegion": evt.livehouse.prefecture || "",
+              "addressCountry": "JP"
+            }
+          },
+          "image": evt.image_url || "https://doortike.com/ogp.png",
+          "description": `${evt.livehouse.name}で開催されるライブ情報。出演: ${Array.isArray(evt.artists_data) ? evt.artists_data.map(a => a?.name).filter(Boolean).join(', ') : '各アーティスト'}`,
+          "offers": {
+            "@type": "Offer",
+            "url": evt.ticket_url || "https://doortike.com/",
+            "price": "0", // Default to 0 as exact price parsing is complex
+            "priceCurrency": "JPY",
+            "availability": "https://schema.org/InStock"
+          }
+        };
+      } catch (err) {
+        return null;
+      }
+    }).filter(Boolean);
+
+    script.text = JSON.stringify(jsonLdData);
+  }, [selectedArea, selectedPrefecture, selectedDate, events]);
+
   // Listen to Auth State changes and sync with Firestore
   useEffect(() => {
     if (!auth) return;
@@ -1410,7 +1474,7 @@ function App() {
                 </div>
               </button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%', gap: '6px' }}>
+            <h1 style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '100%', height: '100%', gap: '6px', margin: 0, padding: 0 }}>
               <img 
                 src="/assets/logo.png" 
                 alt="ドアチケ" 
@@ -1422,7 +1486,7 @@ function App() {
                 }} 
                 onClick={() => navigateTo('/')}
               />
-              <p style={{ 
+              <span style={{ 
                 margin: 0, 
                 fontSize: '0.7rem', 
                 fontWeight: '600', 
@@ -1431,8 +1495,8 @@ function App() {
                 opacity: 0.7
               }}>
                 ドアチケ
-              </p>
-            </div>
+              </span>
+            </h1>
           </header>
 
           <div className="location-filters" style={{ padding: '10px 10px 10px' }}>
