@@ -20,9 +20,21 @@
     <meta name="twitter:description" content="下北沢・渋谷・新宿をはじめ、全国主要都市のライブハウス情報を網羅。「今日のライブ情報」を今すぐディグれる直前特化型アプリ。今夜の『ライブに行きたい』という衝動を加速させます。" />
     <meta name="twitter:image" content="https://doortike.com/ogp.png" />
     <link rel="canonical" href="https://doortike.com/" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1e3a8a" />
+    <link rel="apple-touch-icon" href="/assets/logo.png" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('SW registered!', reg))
+            .catch(err => console.log('SW registration failed: ', err));
+        });
+      }
+    </script>
   </body>
 </html>

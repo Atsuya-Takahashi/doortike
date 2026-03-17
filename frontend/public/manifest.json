@@ -1,0 +1,18 @@
+{
+  "short_name": "ドアチケ",
+  "name": "ドアチケ - 今すぐ、ライブハウスへ。",
+  "description": "今日のライブ情報を今すぐディグれる直前特化型アプリ。",
+  "icons": [
+    {
+      "src": "/assets/logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1e3a8a",
+  "background_color": "#f0f4f8",
+  "orientation": "portrait"
+}

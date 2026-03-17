@@ -125,30 +125,55 @@ function App() {
     }
     window.addEventListener('popstate', handlePopState)
 
+    // Parse URL on mount
+    const params = new URLSearchParams(window.location.search);
+    const urlPref = params.get('pref');
+    if (urlPref) setSelectedPrefecture(urlPref);
+    
+    const urlArea = params.get('area');
+    if (urlArea) setSelectedArea(urlArea);
+    
+    const urlDate = params.get('date');
+    if (urlDate) {
+      const parsedDate = new Date(urlDate);
+      if (!isNaN(parsedDate.getTime())) {
+        setSelectedDate(parsedDate);
+      }
+    }
+    
+    const urlFree = params.get('free');
+    if (urlFree === 'true') setShowOnlyFree(true);
+
     // Hardcoded areas dict to replace the backend API
     setAreasDict({
       "東京": ["渋谷", "新宿", "下北沢"]
     })
+
+    return () => window.removeEventListener('popstate', handlePopState);
   }, [])
 
-  // --- UTM Tracker Utility ---
-  const addUtmParams = (url, campaign) => {
-    if (!url) return url;
-    try {
-      const urlObj = new URL(url);
-      urlObj.searchParams.set('utm_source', 'doortike');
-      urlObj.searchParams.set('utm_medium', 'referral');
-      urlObj.searchParams.set('utm_campaign', campaign || 'general');
-      return urlObj.toString();
-    } catch (e) {
-      // Fallback for relative paths or malformed URLs
-      if (typeof url === 'string' && url.startsWith('http')) {
-        const separator = url.includes('?') ? '&' : '?';
-        return `${url}${separator}utm_source=doortike&utm_medium=referral&utm_campaign=${campaign || 'general'}`;
-      }
-      return url;
+  // Update URL params when filters change
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (selectedPrefecture !== '東京') params.set('pref', selectedPrefecture);
+    if (selectedArea !== 'All') params.set('area', selectedArea);
+    
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const todayStr = format(new Date(), 'yyyy-MM-dd'); // Use calendar today for URL comparison
+    if (dateStr !== todayStr) params.set('date', dateStr);
+    
+    if (showOnlyFree) params.set('free', 'true');
+    
+    const newSearch = params.toString();
+    const currentSearch = window.location.search.replace(/^\?/, '');
+    
+    if (newSearch !== currentSearch) {
+      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+      window.history.replaceState(null, '', newUrl);
     }
-  };
+  }, [selectedPrefecture, selectedArea, selectedDate, showOnlyFree]);
+
+  // --- UTM Tracker Utility ---
 
   // Geolocation for initial area setting
   useEffect(() => {
@@ -664,450 +689,6 @@ function App() {
 
   const isEventBookmarked = (id) => bookmarkedEvents.some(b => b.id === id)
 
-  const handleCouponClick = (e, evt) => {
-    e.stopPropagation()
-    e.preventDefault()
-    if (userPassType) {
-      setIsPassModalOpen(true)
-    } else {
-      setIsPurchaseModalOpen(true)
-    }
-  }
-
-  const isEventHappening = (evt) => {
-    if (!evt.start_time || !evt.date) return false;
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    if (evt.date !== todayStr) return false;
-
-    try {
-      const [hours, minutes] = evt.start_time.split(':').map(Number);
-      if (isNaN(hours) || isNaN(minutes)) return false;
-      const startTime = new Date();
-      startTime.setHours(hours, minutes, 0, 0);
-      const now = new Date();
-      const diffMs = now - startTime;
-      const diffHours = diffMs / (1000 * 60 * 60);
-      return diffHours >= 0 && diffHours <= 3;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  const EventCard = ({ evt, area, position }) => {
-    if (!evt || !evt.livehouse) return null;
-    const happening = isEventHappening(evt);
-    
-    // GA4 Tracking Logic
-    const eventLabel = `${evt.date}_${evt.livehouse.name}_${evt.title}`;
-    const { ref, inView } = useInView({ triggerOnce: true, threshold: 0.1 });
-
-    useEffect(() => {
-      if (inView) {
-        ReactGA.event({
-          category: "EventCard",
-          action: "Impression",
-          label: eventLabel,
-          area: area,
-          position: position,
-          is_pr: evt.is_pr || false
-        });
-      }
-    }, [inView, eventLabel, area, position, evt.is_pr]);
-
-    const handleVideoClick = (perfInfo) => {
-      ReactGA.event({
-        category: "Engagement",
-        action: "Play_Video",
-        label: eventLabel,
-        artist: perfInfo.name,
-        area: area,
-        position: position
-      });
-      
-      setVideoModal({ 
-        artistName: perfInfo.name, 
-        loading: false, 
-        videoId: perfInfo.youtube_id, 
-        reported: reportedVideos.includes(perfInfo.name), 
-        eventId: evt.id,
-        ticketUrl: evt.ticket_url ? addUtmParams(evt.ticket_url, 'video_modal_ticket') : null 
-      });
-    };
-
-    const handleTicketClick = () => {
-      ReactGA.event({
-        category: "Conversion",
-        action: "Click_Ticket",
-        label: eventLabel,
-        area: area,
-        position: position,
-        is_pr: evt.is_pr || false
-      });
-    };
-
-    return (
-      <div 
-        ref={ref}
-        className={`glass-panel event-card ${evt.is_pr ? 'pr-card' : ''} ${evt.pickup_type === 'staff' && !evt.is_pr ? 'staff-pick-card' : ''} ${happening ? 'is-happening' : ''}`} 
-        key={evt.id} 
-        style={{ display: 'flex', flexDirection: 'row', overflow: 'visible', padding: 0, position: 'relative' }}
-      >
-          {/* Status Badges */}
-          <div className="card-badge-container">
-            {(evt.pickup_type === 'hot' || (evt.bookmark_count >= 5)) && <span className="card-badge hot-badge"><Flame size={12} style={{marginRight: '2px'}} /> HOT</span>}
-          </div>
-
-          {/* Admin Pickup Toggle */}
-          {isAdmin && (
-            <button 
-              className={`admin-pickup-btn ${evt.pickup_type === 'staff' ? 'active' : ''}`}
-              onClick={(e) => handleToggleStaffPick(e, evt)}
-              title="STAFF PICK の切り替え"
-            >
-              👑
-            </button>
-          )}
-
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: '16px 15px' }}>
-            <div className="event-header">
-              <div className="venue-info">
-                <div className="venue-name-row" style={{ flexWrap: 'wrap', rowGap: '4px', alignItems: 'center' }}>
-                  <MapPin size={15} style={{ flexShrink: 0, color: 'var(--accent-color)', marginRight: '2px' }} />
-                  {evt.venues && evt.venues.length > 1 ? (
-                    evt.venues.map((venue, idx) => (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
-                        {idx > 0 && <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 4px' }}>/</span>}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                          <a
-                            href={addUtmParams(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}`, 'card_map_link')}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="venue-link"
-                            style={{ lineHeight: 1, paddingBottom: '1px', fontWeight: 700, fontSize: '0.85rem' }}
-                          >
-                            {venue.name}
-                          </a>
-                          <div style={{ display: 'flex', alignItems: 'center', transform: 'translateY(-2px)' }}>
-                            <button
-                              className={`icon-btn-small ${likedVenues.includes(venue.id) ? 'active' : ''}`}
-                              onClick={(e) => { e.stopPropagation(); toggleVenueLike(venue.id); }}
-                              title="お気に入りライブハウスに追加"
-                            >
-                              <Heart fill={likedVenues.includes(venue.id) ? "var(--accent-color)" : "none"} size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <a
-                        href={addUtmParams(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.livehouse.name)}`, 'card_map_link')}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="venue-link"
-                        style={{ lineHeight: 1, paddingBottom: '1px', fontWeight: 700, fontSize: '0.85rem' }}
-                      >
-                        {evt.livehouse.name}
-                      </a>
-                      <div style={{ display: 'flex', alignItems: 'center', marginLeft: '4px', transform: 'translateY(-2px)' }}>
-                        <button
-                          className={`icon-btn-small ${likedVenues.includes(evt.livehouse.id) ? 'active' : ''}`}
-                          onClick={(e) => { e.stopPropagation(); toggleVenueLike(evt.livehouse.id); }}
-                          title="お気に入りライブハウスに追加"
-                        >
-                          <Heart fill={likedVenues.includes(evt.livehouse.id) ? "var(--accent-color)" : "none"} size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <h3 className="event-title">
-              <a
-                href={evt.ticket_url ? addUtmParams(evt.ticket_url, 'card_title_ticket') : addUtmParams(`https://www.google.com/search?q=${encodeURIComponent(`${evt.livehouse.name} ${evt.title} チケット`)}`, 'card_title_google_search')}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleTicketClick();
-                }}
-                className="event-link"
-                title={evt.ticket_url ? "チケット購入（外部サイト）" : "チケットを検索（Google）"}
-              >
-                {evt.title}
-              </a>
-            </h3>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '4px', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Clock size={12} style={{ flexShrink: 0, color: 'var(--accent-color)' }} />
-                <span>
-                  {isEventHappening(evt) ? (
-                    <>
-                      <span style={{ color: '#FF3366', fontWeight: '800', fontSize: '0.75rem', marginRight: '8px' }}>
-                        <span style={{ fontSize: '0.8rem', marginRight: '2px', display: 'inline-block' }}>🔴</span> 開催中
-                      </span>
-                      START {evt.start_time}
-                    </>
-                  ) : (
-                    <>OPEN {evt.open_time} / START {evt.start_time}</>
-                  )}
-                </span>
-              </div>
-              {evt.price_info && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
-                  <Ticket size={12} style={{ flexShrink: 0, marginTop: '1px', color: 'var(--accent-color)' }} />
-                  <span className="event-price-info">{evt.price_info}</span>
-                </div>
-              )}
-            </div>
-
-            <p className="event-performers">
-              {(() => {
-                const infoList = evt.artists_data && evt.artists_data.length > 0
-                  ? evt.artists_data.map(item => ({ 
-                      name: item.name, 
-                      youtube_id: item.youtube_id 
-                    }))
-                  : (evt.performers
-                    ? evt.performers.split(/[、,／/\n]\s*/).filter(p => p.trim()).map(p => ({ name: p.trim(), youtube_id: null }))
-                    : []);
-
-                return infoList.map((perfInfo, index) => (
-                  <span key={index}>
-                    {perfInfo.youtube_id ? (
-                      <span
-                        className="performer-link"
-                        onClick={() => handleVideoClick(perfInfo)}
-                      >
-                        {perfInfo.name}
-                      </span>
-                    ) : (
-                      <span className="performer-name">{perfInfo.name}</span>
-                    )}
-                    {index < infoList.length - 1 ? <span style={{ margin: '0 6px', color: 'var(--text-secondary)' }}>/</span> : ''}
-                  </span>
-                ));
-              })()}
-            </p>
-
-            <div className="action-buttons" style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-              {evt.livehouse.drink_fee && (
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  padding: '2px 8px',
-                  background: 'var(--control-bg)',
-                  color: 'var(--text-secondary)',
-                  borderRadius: '12px',
-                  fontSize: '0.8rem',
-                  fontWeight: '600',
-                  border: '1px solid var(--control-border)',
-                  marginRight: 'auto'
-                }}>
-                  1D ¥{evt.livehouse.drink_fee}
-                </span>
-              )}
-
-              {(evt.livehouse.blog_url || evt.coupon_url) && (
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '8px', 
-                  alignItems: 'center', 
-                  marginLeft: evt.livehouse.drink_fee ? '0' : 'auto',
-                  marginRight: '30px'
-                }}>
-                  {evt.livehouse.blog_url && (
-                    <a
-                      href={addUtmParams(evt.livehouse.blog_url, 'card_blog_link')}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="icon-btn"
-                      title="関連ブログ記事を読む"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--text-secondary)',
-                        textDecoration: 'none',
-                        padding: '0',
-                        width: '36px',
-                        height: '36px',
-                        background: 'rgba(var(--text-secondary-rgb), 0.05)',
-                        borderRadius: '50%',
-                        border: '1px solid var(--control-border)',
-                        transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                        position: 'relative'
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.background = 'rgba(var(--text-secondary-rgb), 0.1)';
-                        e.currentTarget.style.transform = 'scale(1.15)';
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.background = 'rgba(var(--text-secondary-rgb), 0.05)';
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }}
-                    >
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <BookOpen size={20} />
-                        <ExternalLink size={10} style={{ position: 'absolute', top: '-6px', right: '-8px' }} />
-                      </div>
-                    </a>
-                  )}
-                  {evt.coupon_url && (
-                    <button
-                      onClick={(e) => handleCouponClick(e, evt)}
-                      className="icon-btn"
-                      title={userPassType ? "ドアチケパスを表示" : "お得なパスポートを見る"}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: userPassType ? 'var(--accent-color)' : 'var(--text-secondary)',
-                        textDecoration: 'none',
-                        padding: '0',
-                        width: '36px',
-                        height: '36px',
-                        background: userPassType ? 'rgba(255, 51, 102, 0.08)' : 'rgba(var(--text-secondary-rgb), 0.05)',
-                        borderRadius: '50%',
-                        border: userPassType ? '1px solid var(--accent-color)' : '1px solid var(--control-border)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                        position: 'relative'
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.background = userPassType ? 'rgba(255, 51, 102, 0.12)' : 'rgba(var(--text-secondary-rgb), 0.1)';
-                        e.currentTarget.style.transform = 'scale(1.15)';
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.background = userPassType ? 'rgba(255, 51, 102, 0.08)' : 'rgba(var(--text-secondary-rgb), 0.05)';
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }}
-                    >
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ticket size={20} />
-                      </div>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={{
-            width: '120px',
-            flexShrink: 0,
-            borderRadius: '0',
-            overflow: 'visible', // Allow labels to protrude
-            backgroundColor: 'var(--control-bg)',
-            position: 'relative',
-            zIndex: 5
-          }}>
-            {/* Image Clipping Container */}
-            <div style={{
-              width: '100%',
-              height: '100%',
-              overflow: 'hidden',
-              borderRadius: '0 var(--surface-radius) var(--surface-radius) 0',
-              position: 'relative'
-            }}>
-              {evt.image_url ? (
-                <img
-                  src={evt.image_url}
-                  alt="Thumbnail"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  loading="lazy"
-                />
-              ) : (
-                <div className="no-image-placeholder">NO IMAGE</div>
-              )}
-            </div>
-            
-            <button
-              onClick={(e) => { e.stopPropagation(); toggleBookmark(evt); }}
-              title="気になるイベントに保存"
-              style={{
-                position: 'absolute',
-                top: '12px',
-                right: '12px',
-                padding: '8px',
-                background: 'rgba(255, 255, 255, 0.85)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                borderRadius: '50%',
-                border: '1px solid rgba(255,255,255,1)',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s',
-                cursor: 'pointer'
-              }}
-              onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-              onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
-            >
-              <Bookmark fill={isEventBookmarked(evt.id) ? "var(--accent-color)" : "none"} color={isEventBookmarked(evt.id) ? "var(--accent-color)" : "#475569"} size={18} />
-            </button>
-
-            {/* Image Area Badges (Bottom Right Stack) */}
-            <div style={{
-              position: 'absolute',
-              bottom: '12px',
-              right: '-10px', // Protrude slightly without going off-screen
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-end',
-              gap: '6px',
-              zIndex: 10
-            }}>
-              {evt.pickup_type === 'staff' && !evt.is_pr && (
-                <div className="card-badge staff-pick-badge" style={{ 
-                  margin: 0, 
-                  padding: '4px 8px',
-                  textAlign: 'center',
-                  fontSize: '0.65rem',
-                  whiteSpace: 'nowrap',
-                  boxShadow: '2px 2px 8px rgba(0,0,0,0.2)',
-                  borderRadius: '4px',
-                  borderRight: 'none'
-                }}>
-                  STAFF PICK
-                </div>
-              )}
-              {evt.is_pr && (
-                <div 
-                  className="pr-label"
-                  style={{
-                    padding: '6px 14px',
-                    background: 'linear-gradient(135deg, #B8860B 0%, #FFD700 100%)',
-                    color: 'white',
-                    fontSize: '0.65rem',
-                    fontWeight: '900',
-                    borderRadius: '6px',
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    backdropFilter: 'blur(8px)',
-                    boxShadow: '0 4px 15px rgba(184, 134, 11, 0.4)',
-                    whiteSpace: 'nowrap',
-                    border: '1px solid rgba(255, 255, 255, 0.4)',
-                    textShadow: '0 1px 2px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  {evt.pr_type === 'tokyo' ? 'TOKYO FEATURED (PR)' : 'Fan Support (PR)'}
-                </div>
-              )}
-            </div>
-          </div>
-      </div>
-    );
-  };
-
   // Handle late-night events: if it's before 4 AM, "today" should be the previous calendar day.
   const now = new Date()
   const today = new Date(now)
@@ -1616,7 +1197,7 @@ function App() {
               <input
                 type="checkbox"
                 checked={showOnlyLiked}
-                onChange={() => { }}
+                onChange={() => setShowOnlyLiked(!showOnlyLiked)}
                 style={{ width: '16px', height: '16px', cursor: 'default' }}
               />
               <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'var(--bg-color)', borderRadius: '50%', width: '12px', height: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.2)' }}>
@@ -1649,7 +1230,22 @@ function App() {
                 </div>
               )}
               {groups.todayRegular.map((evt, index) => (
-                <EventCard key={evt.id} evt={evt} area={evt.livehouse.area} position={index + 1} />
+                <EventCard 
+                  key={evt.id} 
+                  evt={evt} 
+                  area={evt.livehouse.area} 
+                  position={index + 1}
+                  isAdmin={isAdmin}
+                  handleToggleStaffPick={handleToggleStaffPick}
+                  likedVenues={likedVenues}
+                  toggleVenueLike={toggleVenueLike}
+                  isEventBookmarked={isEventBookmarked}
+                  toggleBookmark={toggleBookmark}
+                  setVideoModal={setVideoModal}
+                  reportedVideos={reportedVideos}
+                  userPassType={userPassType}
+                  handleCouponClick={() => userPassType ? setIsPassModalOpen(true) : setIsPurchaseModalOpen(true)}
+                />
               ))}
 
               {/* Today Midnight */}
@@ -1660,7 +1256,22 @@ function App() {
                     {format(selectedDate, 'M月d日')}（{['日', '月', '火', '水', '木', '金', '土'][selectedDate.getDay()]}）深夜のイベント
                   </div>
                   {groups.todayMidnight.map((evt, index) => (
-                    <EventCard key={evt.id} evt={evt} area={evt.livehouse.area} position={groups.todayRegular.length + index + 1} />
+                    <EventCard 
+                      key={evt.id} 
+                      evt={evt} 
+                      area={evt.livehouse.area} 
+                      position={groups.todayRegular.length + index + 1}
+                      isAdmin={isAdmin}
+                      handleToggleStaffPick={handleToggleStaffPick}
+                      likedVenues={likedVenues}
+                      toggleVenueLike={toggleVenueLike}
+                      isEventBookmarked={isEventBookmarked}
+                      toggleBookmark={toggleBookmark}
+                      setVideoModal={setVideoModal}
+                      reportedVideos={reportedVideos}
+                      userPassType={userPassType}
+                      handleCouponClick={() => userPassType ? setIsPassModalOpen(true) : setIsPurchaseModalOpen(true)}
+                    />
                   ))}
                 </>
               )}
@@ -1673,7 +1284,22 @@ function App() {
                     明日のイベント
                   </div>
                   {groups.tomorrowEvents.map((evt, index) => (
-                    <EventCard key={evt.id} evt={evt} area={evt.livehouse.area} position={index + 1} />
+                    <EventCard 
+                      key={evt.id} 
+                      evt={evt} 
+                      area={evt.livehouse.area} 
+                      position={index + 1}
+                      isAdmin={isAdmin}
+                      handleToggleStaffPick={handleToggleStaffPick}
+                      likedVenues={likedVenues}
+                      toggleVenueLike={toggleVenueLike}
+                      isEventBookmarked={isEventBookmarked}
+                      toggleBookmark={toggleBookmark}
+                      setVideoModal={setVideoModal}
+                      reportedVideos={reportedVideos}
+                      userPassType={userPassType}
+                      handleCouponClick={() => userPassType ? setIsPassModalOpen(true) : setIsPurchaseModalOpen(true)}
+                    />
                   ))}
                 </>
               )}
@@ -1792,7 +1418,23 @@ function App() {
                           {isNaN(dateObj) ? dateStr : `${format(dateObj, 'M月d日')}（${['日', '月', '火', '水', '木', '金', '土'][dateObj.getDay()]}）`}
                         </h4>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                          {groupedBookmarks[dateStr].map(evt => renderEventCard(evt))}
+                          {groupedBookmarks[dateStr].map(evt => (
+                            <EventCard 
+                              key={evt.id} 
+                              evt={evt} 
+                              area={evt.livehouse.area} 
+                              isAdmin={isAdmin}
+                              handleToggleStaffPick={handleToggleStaffPick}
+                              likedVenues={likedVenues}
+                              toggleVenueLike={toggleVenueLike}
+                              isEventBookmarked={isEventBookmarked}
+                              toggleBookmark={toggleBookmark}
+                              setVideoModal={setVideoModal}
+                              reportedVideos={reportedVideos}
+                              userPassType={userPassType}
+                              handleCouponClick={() => userPassType ? setIsPassModalOpen(true) : setIsPurchaseModalOpen(true)}
+                            />
+                          ))}
                         </div>
                       </div>
                     )
@@ -2313,3 +1955,416 @@ function App() {
 }
 
 export default App
+
+// --- Helper Functions and Sub-components (outside App to avoid recreation on re-render) ---
+
+const addUtmParams = (url, campaign) => {
+  if (!url) return url;
+  try {
+    const urlObj = new URL(url);
+    urlObj.searchParams.set('utm_source', 'doortike');
+    urlObj.searchParams.set('utm_medium', 'referral');
+    urlObj.searchParams.set('utm_campaign', campaign || 'general');
+    return urlObj.toString();
+  } catch (e) {
+    if (typeof url === 'string' && url.startsWith('http')) {
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}utm_source=doortike&utm_medium=referral&utm_campaign=${campaign || 'general'}`;
+    }
+    return url;
+  }
+};
+
+const isEventHappening = (evt) => {
+  if (!evt.start_time || !evt.date) return false;
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  if (evt.date !== todayStr) return false;
+
+  try {
+    const [hours, minutes] = evt.start_time.split(':').map(Number);
+    if (isNaN(hours) || isNaN(minutes)) return false;
+    const startTime = new Date();
+    startTime.setHours(hours, minutes, 0, 0);
+    const now = new Date();
+    const diffMs = now - startTime;
+    const diffHours = diffMs / (1000 * 60 * 60);
+    return diffHours >= 0 && diffHours <= 3;
+  } catch (e) {
+    return false;
+  }
+};
+
+const EventCard = ({ 
+  evt, 
+  area, 
+  position, 
+  isAdmin, 
+  handleToggleStaffPick, 
+  likedVenues, 
+  toggleVenueLike, 
+  isEventBookmarked, 
+  toggleBookmark, 
+  setVideoModal, 
+  reportedVideos, 
+  userPassType, 
+  handleCouponClick 
+}) => {
+  if (!evt || !evt.livehouse) return null;
+  const happening = isEventHappening(evt);
+  
+  const eventLabel = `${evt.date}_${evt.livehouse.name}_${evt.title}`;
+  const { ref, inView } = useInView({ triggerOnce: true, threshold: 0.1 });
+
+  useEffect(() => {
+    if (inView) {
+      ReactGA.event({
+        category: "EventCard",
+        action: "Impression",
+        label: eventLabel,
+        area: area,
+        position: position,
+        is_pr: evt.is_pr || false
+      });
+    }
+  }, [inView, eventLabel, area, position, evt.is_pr]);
+
+  const handleVideoClick = (perfInfo) => {
+    ReactGA.event({
+      category: "Engagement",
+      action: "Play_Video",
+      label: eventLabel,
+      artist: perfInfo.name,
+      area: area,
+      position: position
+    });
+    
+    setVideoModal({ 
+      artistName: perfInfo.name, 
+      loading: false, 
+      videoId: perfInfo.youtube_id, 
+      reported: reportedVideos.includes(perfInfo.name), 
+      eventId: evt.id,
+      ticketUrl: evt.ticket_url ? addUtmParams(evt.ticket_url, 'video_modal_ticket') : null 
+    });
+  };
+
+  const handleTicketClick = () => {
+    ReactGA.event({
+      category: "Conversion",
+      action: "Click_Ticket",
+      label: eventLabel,
+      area: area,
+      position: position,
+      is_pr: evt.is_pr || false
+    });
+  };
+
+  return (
+    <div 
+      ref={ref}
+      className={`glass-panel event-card ${evt.is_pr ? 'pr-card' : ''} ${evt.pickup_type === 'staff' && !evt.is_pr ? 'staff-pick-card' : ''} ${happening ? 'is-happening' : ''}`} 
+      style={{ display: 'flex', flexDirection: 'row', overflow: 'visible', padding: 0, position: 'relative' }}
+    >
+        <div className="card-badge-container">
+          {(evt.pickup_type === 'hot' || (evt.bookmark_count >= 5)) && <span className="card-badge hot-badge"><Flame size={12} style={{marginRight: '2px'}} /> HOT</span>}
+        </div>
+
+        {isAdmin && (
+          <button 
+            className={`admin-pickup-btn ${evt.pickup_type === 'staff' ? 'active' : ''}`}
+            onClick={(e) => handleToggleStaffPick(e, evt)}
+            title="STAFF PICK の切り替え"
+          >
+            👑
+          </button>
+        )}
+
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', padding: '16px 15px' }}>
+          <div className="event-header">
+            <div className="venue-info">
+              <div className="venue-name-row" style={{ flexWrap: 'wrap', rowGap: '4px', alignItems: 'center' }}>
+                <MapPin size={15} style={{ flexShrink: 0, color: 'var(--accent-color)', marginRight: '2px' }} />
+                {evt.venues && evt.venues.length > 1 ? (
+                  evt.venues.map((venue, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'center' }}>
+                      {idx > 0 && <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', margin: '0 4px' }}>/</span>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <a
+                          href={addUtmParams(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue.name)}`, 'card_map_link')}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="venue-link"
+                          style={{ lineHeight: 1, paddingBottom: '1px', fontWeight: 700, fontSize: '0.85rem' }}
+                        >
+                          {venue.name}
+                        </a>
+                        <div style={{ display: 'flex', alignItems: 'center', transform: 'translateY(-2px)' }}>
+                          <button
+                            className={`icon-btn-small ${likedVenues.includes(venue.id) ? 'active' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); toggleVenueLike(venue.id); }}
+                            title="お気に入りライブハウスに追加"
+                          >
+                            <Heart fill={likedVenues.includes(venue.id) ? "var(--accent-color)" : "none"} size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                    <a
+                      href={addUtmParams(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(evt.livehouse.name)}`, 'card_map_link')}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="venue-link"
+                      style={{ lineHeight: 1, paddingBottom: '1px', fontWeight: 700, fontSize: '0.85rem' }}
+                    >
+                      {evt.livehouse.name}
+                    </a>
+                    <div style={{ display: 'flex', alignItems: 'center', marginLeft: '4px', transform: 'translateY(-2px)' }}>
+                      <button
+                        className={`icon-btn-small ${likedVenues.includes(evt.livehouse.id) ? 'active' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); toggleVenueLike(evt.livehouse.id); }}
+                        title="お気に入りライブハウスに追加"
+                      >
+                        <Heart fill={likedVenues.includes(evt.livehouse.id) ? "var(--accent-color)" : "none"} size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <h3 className="event-title">
+            <a
+              href={evt.ticket_url ? addUtmParams(evt.ticket_url, 'card_title_ticket') : addUtmParams(`https://www.google.com/search?q=${encodeURIComponent(`${evt.livehouse.name} ${evt.title} チケット`)}`, 'card_title_google_search')}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleTicketClick();
+              }}
+              className="event-link"
+              title={evt.ticket_url ? "チケット購入（外部サイト）" : "チケットを検索（Google）"}
+            >
+              {evt.title}
+            </a>
+          </h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', color: 'var(--text-primary)', marginTop: '4px', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Clock size={12} style={{ flexShrink: 0, color: 'var(--accent-color)' }} />
+              <span>
+                {isEventHappening(evt) ? (
+                  <>
+                    <span style={{ color: '#FF3366', fontWeight: '800', fontSize: '0.75rem', marginRight: '8px' }}>
+                      <span style={{ fontSize: '0.8rem', marginRight: '2px', display: 'inline-block' }}>🔴</span> 開催中
+                    </span>
+                    START {evt.start_time}
+                  </>
+                ) : (
+                  <>OPEN {evt.open_time} / START {evt.start_time}</>
+                )}
+              </span>
+            </div>
+            {evt.price_info && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '4px' }}>
+                <Ticket size={12} style={{ flexShrink: 0, marginTop: '1px', color: 'var(--accent-color)' }} />
+                <span className="event-price-info">{evt.price_info}</span>
+              </div>
+            )}
+          </div>
+
+          <p className="event-performers">
+            {(() => {
+              const infoList = evt.artists_data && evt.artists_data.length > 0
+                ? evt.artists_data.map(item => ({ 
+                    name: item.name, 
+                    youtube_id: item.youtube_id 
+                  }))
+                : (evt.performers
+                  ? evt.performers.split(/[、,／/\n]\s*/).filter(p => p.trim()).map(p => ({ name: p.trim(), youtube_id: null }))
+                  : []);
+
+              return infoList.map((perfInfo, index) => (
+                <span key={index}>
+                  {perfInfo.youtube_id ? (
+                    <span
+                      className="performer-link"
+                      onClick={() => handleVideoClick(perfInfo)}
+                    >
+                      {perfInfo.name}
+                    </span>
+                  ) : (
+                    <span className="performer-name">{perfInfo.name}</span>
+                  )}
+                  {index < infoList.length - 1 ? <span style={{ margin: '0 6px', color: 'var(--text-secondary)' }}>/</span> : ''}
+                </span>
+              ));
+            })()}
+          </p>
+
+          <div className="action-buttons" style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {evt.livehouse.drink_fee && (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '2px 8px',
+                background: 'var(--control-bg)',
+                color: 'var(--text-secondary)',
+                borderRadius: '12px',
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                border: '1px solid var(--control-border)',
+                marginRight: 'auto'
+              }}>
+                1D ¥{evt.livehouse.drink_fee}
+              </span>
+            )}
+
+            {(evt.livehouse.blog_url || evt.coupon_url) && (
+              <div style={{ 
+                display: 'flex', 
+                gap: '8px', 
+                alignItems: 'center', 
+                marginLeft: evt.livehouse.drink_fee ? '0' : 'auto',
+                marginRight: '30px'
+              }}>
+                {evt.livehouse.blog_url && (
+                  <a
+                    href={addUtmParams(evt.livehouse.blog_url, 'card_blog_link')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="icon-btn"
+                    title="関連ブログ記事を読む"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--text-secondary)',
+                      textDecoration: 'none',
+                      padding: '0',
+                      width: '36px',
+                      height: '36px',
+                      background: 'rgba(var(--text-secondary-rgb), 0.05)',
+                      borderRadius: '50%',
+                      border: '1px solid var(--control-border)',
+                      transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                      position: 'relative'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = 'rgba(var(--text-secondary-rgb), 0.1)';
+                      e.currentTarget.style.transform = 'scale(1.15)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'rgba(var(--text-secondary-rgb), 0.05)';
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
+                  >
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <BookOpen size={20} />
+                      <ExternalLink size={10} style={{ position: 'absolute', top: '-6px', right: '-8px' }} />
+                    </div>
+                  </a>
+                )}
+                {evt.coupon_url && (
+                  <button
+                    onClick={(e) => handleCouponClick(e, evt)}
+                    className="icon-btn"
+                    title={userPassType ? "ドアチケパスを表示" : "お得なパスポートを見る"}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: userPassType ? 'var(--accent-color)' : 'var(--text-secondary)',
+                      textDecoration: 'none',
+                      padding: '0',
+                      width: '36px',
+                      height: '36px',
+                      background: userPassType ? 'rgba(255, 51, 102, 0.08)' : 'rgba(var(--text-secondary-rgb), 0.05)',
+                      borderRadius: '50%',
+                      border: userPassType ? '1px solid var(--accent-color)' : '1px solid var(--control-border)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                      position: 'relative'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = userPassType ? 'rgba(255, 51, 102, 0.12)' : 'rgba(var(--text-secondary-rgb), 0.1)';
+                      e.currentTarget.style.transform = 'scale(1.15)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = userPassType ? 'rgba(255, 51, 102, 0.08)' : 'rgba(var(--text-secondary-rgb), 0.05)';
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
+                  >
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ticket size={20} />
+                    </div>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{
+          width: '120px',
+          flexShrink: 0,
+          borderRadius: '0',
+          overflow: 'visible',
+          backgroundColor: 'var(--control-bg)',
+          position: 'relative',
+          zIndex: 5
+        }}>
+          <div style={{
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            borderRadius: '0 var(--surface-radius) var(--surface-radius) 0',
+            position: 'relative'
+          }}>
+            {evt.image_url ? (
+              <img
+                src={evt.image_url}
+                alt="Thumbnail"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                loading="lazy"
+              />
+            ) : (
+              <div className="no-image-placeholder">NO IMAGE</div>
+            )}
+          </div>
+          
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleBookmark(evt); }}
+            title="気になるイベントに保存"
+            style={{
+              position: 'absolute',
+              top: '12px',
+              right: '12px',
+              padding: '8px',
+              background: 'rgba(255, 255, 255, 0.85)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderRadius: '50%',
+              border: '1px solid rgba(255,255,255,1)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s',
+              cursor: 'pointer'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            <Bookmark fill={isEventBookmarked(evt.id) ? "var(--accent-color)" : "none"} color={isEventBookmarked(evt.id) ? "var(--accent-color)" : "#475569"} size={18} />
+          </button>
+        </div>
+    </div>
+  );
+};
