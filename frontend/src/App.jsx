@@ -1572,7 +1572,7 @@ function App() {
                   borderRadius: '16px', 
                   display: 'flex', 
                   alignItems: 'center', 
-                  justify-content: 'center', 
+                  justifyContent: 'center', 
                   margin: '0 auto 16px',
                   boxShadow: '0 8px 16px rgba(255, 51, 102, 0.2)' 
                 }}>
