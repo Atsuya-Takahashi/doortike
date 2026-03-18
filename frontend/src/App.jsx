@@ -90,6 +90,24 @@ function App() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
   
+
+  // Platform detection
+  const isIOS = useMemo(() => {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  }, []);
+
+  const isSafari = useMemo(() => {
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  }, []);
+
+  const isMobile = useMemo(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
+
+  const isStandalone = useMemo(() => {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  }, []);
+
   // Auto-show install guide logic
   useEffect(() => {
     // Check if we should show the guide automatically
@@ -127,23 +145,6 @@ function App() {
     // When dismissed, don't show automatically for another 7 days
     localStorage.setItem('installBannerDismissed', Date.now().toString());
   };
-
-  // Platform detection
-  const isIOS = useMemo(() => {
-    return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  }, []);
-
-  const isSafari = useMemo(() => {
-    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-  }, []);
-
-  const isMobile = useMemo(() => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  }, []);
-
-  const isStandalone = useMemo(() => {
-    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-  }, []);
 
 
 
