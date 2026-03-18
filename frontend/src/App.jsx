@@ -114,7 +114,7 @@ function App() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   }, []);
 
-  console.log("PWA Stats:", { isMobile, isStandalone, showInstallBanner, isInstallable, isInstallModalOpen, isIOS });
+
 
 
   // Save to localStorage
@@ -1153,7 +1153,7 @@ function App() {
                     }}
                     style={{
                       position: 'absolute',
-                      right: '-45px',
+                      left: 'calc(100% + 5px)',
                       background: 'var(--accent-color)',
                       color: 'white',
                       border: 'none',
