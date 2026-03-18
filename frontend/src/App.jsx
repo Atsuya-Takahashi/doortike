@@ -1173,34 +1173,6 @@ function App() {
                   }} 
                   onClick={() => setIsAboutModalOpen(true)}
                 />
-                {!isStandalone && isMobile && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (deferredPrompt) {
-                        handleInstallClick();
-                      } else {
-                        setIsInstallModalOpen(true);
-                      }
-                    }}
-                    style={{
-                      position: 'absolute',
-                      left: 'calc(100% + 5px)',
-                      background: 'var(--accent-color)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '12px',
-                      padding: '4px 8px',
-                      fontSize: '0.6rem',
-                      fontWeight: 'bold',
-                      animation: 'pulse 2s infinite',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    INSTALL
-                  </button>
-                )}
               </div>
               <span style={{ 
                 margin: 0, 
