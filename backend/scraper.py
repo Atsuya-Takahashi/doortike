@@ -408,18 +408,27 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
         if not href or href in processed_hrefs: continue
         processed_hrefs.add(href)
         
-        time_elem = await link.query_selector('time')
-        if not time_elem: continue
-        
-        time_divs = await time_elem.query_selector_all('div')
-        if len(time_divs) < 3: continue
-        
         try:
-            year_str = await (await time_divs[0].get_property("textContent")).json_value()
-            month_str = await (await time_divs[1].get_property("textContent")).json_value()
-            day_str = await (await time_divs[2].get_property("textContent")).json_value()
-            event_date_str = f"{year_str.strip()}-{month_str.strip()}-{day_str.strip()}"
-            event_date = datetime.strptime(event_date_str, "%Y-%m-%d")
+            # TEXT CONTENT extraction is more robust than counting div children
+            # The structure can be <div>2026</div><div>03</div><div>19</div> or 2026<div>03</div><div>19</div> etc.
+            full_date_text = await time_elem.text_content()
+            # Look for 4-digit year, 2-digit month, 2-digit day
+            date_match = re.search(r'(\d{4})[./\s]*(\d{1,2})[./\s]*(\d{1,2})', full_date_text)
+            
+            if date_match:
+                year_str, month_str, day_str = date_match.groups()
+                event_date_str = f"{year_str}-{month_str.zfill(2)}-{day_str.zfill(2)}"
+                event_date = datetime.strptime(event_date_str, "%Y-%m-%d")
+            else:
+                # Fallback to existing div logic if regex fails, or just better error log
+                time_divs = await time_elem.query_selector_all('div')
+                if len(time_divs) >= 2:
+                    # If 2 divs, it might be MM-DD (assuming current year) or something else
+                    # Loft sites usually have at least Year-Month-Day in text
+                    print(f"[{venue_name}] Regex failed, full text was: '{full_date_text.strip()}'")
+                    continue
+                else:
+                    continue
         except Exception as e:
             print(f"[{venue_name}] Failed to parse date: {e}")
             continue
@@ -1174,6 +1183,21 @@ def sync_prioritized_artist_videos(db_session, youtube_fetch_count: int) -> int:
     print(f"[Sync] Completed. Total fetch this run: {youtube_fetch_count}")
     return youtube_fetch_count
 
+def send_discord_notification(message: str):
+    """Send a notification to Discord via Webhook."""
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        print("[Notification] DISCORD_WEBHOOK_URL not set, skipping notification.")
+        return
+
+    try:
+        payload = {"content": message}
+        response = requests.post(webhook_url, json=payload, timeout=10)
+        response.raise_for_status()
+        print("[Notification] Discord notification sent successfully.")
+    except Exception as e:
+        print(f"[Notification] Failed to send Discord notification: {e}")
+
 async def async_run_all_scrapers():
     # Handle JST time (+9h from UTC)
     run_start_time = datetime.now(timezone.utc)
@@ -1184,9 +1208,14 @@ async def async_run_all_scrapers():
     target_dates = [today, tomorrow]
     youtube_fetch_count = 0
     
+    results = [] # List of (venue_name, count, error_msg)
+    
     async with async_playwright() as p:
+        print("[Scraper] Launching browser...")
         browser = await p.chromium.launch(headless=True)
+        print("[Scraper] Creating new page...")
         page = await browser.new_page()
+        print("[Scraper] Browser and page initialized.")
         
         # 0. Fetch pending reports
         db_reports = SessionLocal()
@@ -1205,10 +1234,13 @@ async def async_run_all_scrapers():
         # 1. Shinjuku LOFT
         db_loft = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_loft_project_venue(page, "新宿LOFT", "loft", target_dates, db_loft, youtube_fetch_count, pending_reports)
+            count = await scrape_loft_project_venue(page, "loft", "新宿LOFT", target_dates, db_loft, youtube_fetch_count, pending_reports)
+            youtube_fetch_count = count
+            results.append(("新宿LOFT", "✅ 完了", ""))
         except Exception as e:
             db_loft.rollback()
             print(f"Error scraping Shinjuku LOFT: {e}")
+            results.append(("新宿LOFT", "❌ 失敗", str(e)))
         finally:
             db_loft.close()
 
@@ -1217,10 +1249,13 @@ async def async_run_all_scrapers():
         # 2. Shimokitazawa SHELTER
         db_shelter = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_loft_project_venue(page, "下北沢SHELTER", "shelter", target_dates, db_shelter, youtube_fetch_count, pending_reports)
+            count = await scrape_loft_project_venue(page, "shelter", "下北沢SHELTER", target_dates, db_shelter, youtube_fetch_count, pending_reports)
+            youtube_fetch_count = count
+            results.append(("下北沢SHELTER", "✅ 完了", ""))
         except Exception as e:
             db_shelter.rollback()
             print(f"Error scraping Shimokitazawa SHELTER: {e}")
+            results.append(("下北沢SHELTER", "❌ 失敗", str(e)))
         finally:
             db_shelter.close()
         
@@ -1250,10 +1285,13 @@ async def async_run_all_scrapers():
         # 5. Flowers LOFT (Shimokitazawa)
         db_flowers = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_loft_project_venue(page, "Flowers LOFT", "flowersloft", target_dates, db_flowers, youtube_fetch_count, pending_reports)
+            count = await scrape_loft_project_venue(page, "flowersloft", "Flowers LOFT", target_dates, db_flowers, youtube_fetch_count, pending_reports)
+            youtube_fetch_count = count
+            results.append(("Flowers LOFT", "✅ 完了", ""))
         except Exception as e:
             db_flowers.rollback()
             print(f"Error scraping Flowers LOFT: {e}")
+            results.append(("Flowers LOFT", "❌ 失敗", str(e)))
         finally:
             db_flowers.close()
 
@@ -1262,10 +1300,13 @@ async def async_run_all_scrapers():
         # 6. Shimokitazawa ERA
         db_era = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_era_events(page, db_era, youtube_fetch_count, pending_reports)
+            count = await scrape_era_events(page, db_era, youtube_fetch_count, pending_reports)
+            youtube_fetch_count = count
+            results.append(("下北沢ERA", "✅ 完了", ""))
         except Exception as e:
             db_era.rollback()
             print(f"Error scraping Shimokitazawa ERA: {e}")
+            results.append(("下北沢ERA", "❌ 失敗", str(e)))
         finally:
             db_era.close()
 
@@ -1274,10 +1315,13 @@ async def async_run_all_scrapers():
         # 7. Shimokitazawa MOSAiC
         db_mosaic = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_mosaic_events(page, db_mosaic, youtube_fetch_count, pending_reports)
+            count = await scrape_mosaic_events(page, db_mosaic, youtube_fetch_count, pending_reports)
+            youtube_fetch_count = count
+            results.append(("下北沢MOSAiC", "✅ 完了", ""))
         except Exception as e:
             db_mosaic.rollback()
             print(f"Error scraping Shimokitazawa MOSAiC: {e}")
+            results.append(("下北沢MOSAiC", "❌ 失敗", str(e)))
         finally:
             db_mosaic.close()
 
@@ -1286,10 +1330,13 @@ async def async_run_all_scrapers():
         # 8. Shimokitazawa CLUB251
         db_251 = SessionLocal()
         try:
-            youtube_fetch_count = await scrape_club251_events(page, db_251, youtube_fetch_count, pending_reports)
+            count = await scrape_club251_events(page, db_251, youtube_fetch_count, pending_reports)
+            youtube_fetch_count = count
+            results.append(("下北沢CLUB251", "✅ 完了", ""))
         except Exception as e:
             db_251.rollback()
             print(f"Error scraping Shimokitazawa CLUB251: {e}")
+            results.append(("下北沢CLUB251", "❌ 失敗", str(e)))
         finally:
             db_251.close()
                 
@@ -1330,6 +1377,19 @@ async def async_run_all_scrapers():
         db_cleanup.rollback()
     finally:
         db_cleanup.close()
+
+    # --- Send Discord Notification ---
+    summary_lines = [f"📅 **スクレイピング結果集計 ({now_jst.strftime('%Y/%m/%d %H:%M')})**", ""]
+    for venue, status, err in results:
+        line = f"- {venue}: {status}"
+        if err:
+            line += f" (内容: {err})"
+        summary_lines.append(line)
+    
+    summary_lines.append("")
+    summary_lines.append(f"📹 YouTube取得数: {youtube_fetch_count}件 / 上限{DAILY_FETCH_LIMIT}件")
+    
+    send_discord_notification("\n".join(summary_lines))
 
 def run_all_scrapers():
     """Wrapper to run the async scraper synchronously."""
