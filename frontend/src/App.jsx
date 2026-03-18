@@ -89,26 +89,44 @@ function App() {
   // PWA Install states
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
-  const [showInstallBanner, setShowInstallBanner] = useState(() => {
-    try {
-      const dismissedAt = localStorage.getItem('installBannerDismissed');
-      // If not dismissed yet, show it
-      if (!dismissedAt) return true;
-      
-      // Backward compatibility: if it was set to 'true' (old behavior), 
-      // treat it as dismissed long ago and reset to current time to start a cycle
-      if (dismissedAt === 'true') return false; 
+  
+  // Auto-show install guide logic
+  useEffect(() => {
+    // Check if we should show the guide automatically
+    const shouldShowAutomatically = () => {
+      try {
+        // Only on mobile and not already installed
+        if (!isMobile || isStandalone) return false;
+        
+        const dismissedAt = localStorage.getItem('installBannerDismissed');
+        // If never dismissed, show it
+        if (!dismissedAt) return true;
+        // Backward compatibility
+        if (dismissedAt === 'true') return false;
 
-      const lastDismissed = parseInt(dismissedAt, 10);
-      const now = Date.now();
-      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
-      
-      // Show again if more than 7 days passed
-      return now - lastDismissed > SEVEN_DAYS;
-    } catch {
-      return true;
+        const lastDismissed = parseInt(dismissedAt, 10);
+        const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+        
+        // Show again if 7 days passed
+        return Date.now() - lastDismissed > SEVEN_DAYS;
+      } catch {
+        return false;
+      }
+    };
+
+    if (shouldShowAutomatically()) {
+      const timer = setTimeout(() => {
+        setIsInstallModalOpen(true);
+      }, 1500); // 1.5s delay to be less jarring
+      return () => clearTimeout(timer);
     }
-  });
+  }, [isMobile, isStandalone]);
+
+  const handleCloseInstallModal = () => {
+    setIsInstallModalOpen(false);
+    // When dismissed, don't show automatically for another 7 days
+    localStorage.setItem('installBannerDismissed', Date.now().toString());
+  };
 
   // Platform detection
   const isIOS = useMemo(() => {
@@ -1154,7 +1172,7 @@ function App() {
                   }} 
                   onClick={() => setIsAboutModalOpen(true)}
                 />
-                {!isStandalone && (isInstallable || (isMobile && !isStandalone)) && (
+                {!isStandalone && isMobile && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1568,7 +1586,7 @@ function App() {
 
       {/* --- PWA Install Modal (Standalone) --- */}
       {isInstallModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsInstallModalOpen(false)}>
+        <div className="modal-overlay" onClick={handleCloseInstallModal}>
           <div
             className="modal-content"
             onClick={(e) => e.stopPropagation()}
@@ -1576,7 +1594,7 @@ function App() {
           >
             <div className="modal-header">
               <h3><Smartphone size={20} /> ホーム画面に追加</h3>
-              <button className="close-btn" onClick={() => setIsInstallModalOpen(false)}>&times;</button>
+              <button className="close-btn" onClick={handleCloseInstallModal}>&times;</button>
             </div>
             <div className="modal-body" style={{ padding: '32px 24px', color: 'var(--text-primary)' }}>
               <div style={{ textAlign: 'center', marginBottom: '24px' }}>
@@ -1637,7 +1655,7 @@ function App() {
 
               <button
                 className="secondary-btn"
-                onClick={() => setIsInstallModalOpen(false)}
+                onClick={handleCloseInstallModal}
                 style={{ marginTop: '24px', width: '100%', height: '50px', borderRadius: '12px', fontSize: '1rem', fontWeight: '600', opacity: 0.7 }}
               >
                 あとで
@@ -2130,35 +2148,6 @@ function App() {
               </button>
             </div>
           </div>
-        </div>
-      )}
-      {/* --- Mobile Install Banner --- */}
-      {(showInstallBanner || window.location.hostname === 'localhost') && isMobile && !isInstallModalOpen && !isStandalone && (
-        <div className="mobile-install-banner">
-          <button 
-            className="install-banner-close" 
-            onClick={() => {
-              setShowInstallBanner(false);
-              localStorage.setItem('installBannerDismissed', Date.now().toString());
-            }}
-          >
-            <X size={14} />
-          </button>
-          <div className="install-banner-content">
-            <div className="install-banner-icon">
-              <Download size={22} />
-            </div>
-            <div className="install-banner-text">
-              <h4>ホーム画面に追加</h4>
-              <p>アプリとして快適に利用できます</p>
-            </div>
-          </div>
-          <button 
-            className="install-banner-btn"
-            onClick={() => setIsInstallModalOpen(true)}
-          >
-            追加する
-          </button>
         </div>
       )}
     </div>
