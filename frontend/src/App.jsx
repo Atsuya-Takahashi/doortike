@@ -114,7 +114,7 @@ function App() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   }, []);
 
-  console.log("PWA Stats:", { isMobile, isStandalone, showInstallBanner, isInstallable });
+  console.log("PWA Stats:", { isMobile, isStandalone, showInstallBanner, isInstallable, isInstallModalOpen, isIOS });
 
 
   // Save to localStorage
@@ -2120,7 +2120,7 @@ function App() {
         </div>
       )}
       {/* --- Mobile Install Banner --- */}
-      {showInstallBanner && isMobile && !isInstallModalOpen && !isStandalone && (
+      {(showInstallBanner || window.location.hostname === 'localhost') && isMobile && !isInstallModalOpen && !isStandalone && (
         <div className="mobile-install-banner">
           <button 
             className="install-banner-close" 
