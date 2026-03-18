@@ -114,6 +114,8 @@ function App() {
     return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   }, []);
 
+  console.log("PWA Stats:", { isMobile, isStandalone, showInstallBanner, isInstallable });
+
 
   // Save to localStorage
   useEffect(() => {
@@ -2118,7 +2120,7 @@ function App() {
         </div>
       )}
       {/* --- Mobile Install Banner --- */}
-      {showInstallBanner && !isStandalone && isMobile && (
+      {showInstallBanner && isMobile && (
         <div className="mobile-install-banner">
           <button 
             className="install-banner-close" 
