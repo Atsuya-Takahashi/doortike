@@ -1213,9 +1213,7 @@ async def async_run_all_scrapers():
     async with async_playwright() as p:
         print("[Scraper] Launching browser...")
         browser = await p.chromium.launch(headless=True)
-        print("[Scraper] Creating new page...")
-        page = await browser.new_page()
-        print("[Scraper] Browser and page initialized.")
+        print("[Scraper] Browser initialized.")
         
         # 0. Fetch pending reports
         db_reports = SessionLocal()
@@ -1233,7 +1231,9 @@ async def async_run_all_scrapers():
 
         # 1. Shinjuku LOFT
         db_loft = SessionLocal()
+        page = None
         try:
+            page = await browser.new_page()
             count = await scrape_loft_project_venue(page, "loft", "新宿LOFT", target_dates, db_loft, youtube_fetch_count, pending_reports)
             youtube_fetch_count = count
             results.append(("新宿LOFT", "✅ 完了", ""))
@@ -1242,13 +1242,16 @@ async def async_run_all_scrapers():
             print(f"Error scraping Shinjuku LOFT: {e}")
             results.append(("新宿LOFT", "❌ 失敗", str(e)))
         finally:
+            if page: await page.close()
             db_loft.close()
 
         await asyncio.sleep(VENUE_INTERVAL_SLEEP)
 
         # 2. Shimokitazawa SHELTER
         db_shelter = SessionLocal()
+        page = None
         try:
+            page = await browser.new_page()
             count = await scrape_loft_project_venue(page, "shelter", "下北沢SHELTER", target_dates, db_shelter, youtube_fetch_count, pending_reports)
             youtube_fetch_count = count
             results.append(("下北沢SHELTER", "✅ 完了", ""))
@@ -1257,6 +1260,7 @@ async def async_run_all_scrapers():
             print(f"Error scraping Shimokitazawa SHELTER: {e}")
             results.append(("下北沢SHELTER", "❌ 失敗", str(e)))
         finally:
+            if page: await page.close()
             db_shelter.close()
         
         await asyncio.sleep(VENUE_INTERVAL_SLEEP)
@@ -1297,9 +1301,11 @@ async def async_run_all_scrapers():
 
         await asyncio.sleep(VENUE_INTERVAL_SLEEP)
 
-        # 6. Shimokitazawa ERA
+        # 4. Shimokitazawa ERA
         db_era = SessionLocal()
+        page = None
         try:
+            page = await browser.new_page()
             count = await scrape_era_events(page, db_era, youtube_fetch_count, pending_reports)
             youtube_fetch_count = count
             results.append(("下北沢ERA", "✅ 完了", ""))
@@ -1308,13 +1314,16 @@ async def async_run_all_scrapers():
             print(f"Error scraping Shimokitazawa ERA: {e}")
             results.append(("下北沢ERA", "❌ 失敗", str(e)))
         finally:
+            if page: await page.close()
             db_era.close()
 
         await asyncio.sleep(VENUE_INTERVAL_SLEEP)
 
-        # 7. Shimokitazawa MOSAiC
+        # 5. Shimokitazawa MOSAiC
         db_mosaic = SessionLocal()
+        page = None
         try:
+            page = await browser.new_page()
             count = await scrape_mosaic_events(page, db_mosaic, youtube_fetch_count, pending_reports)
             youtube_fetch_count = count
             results.append(("下北沢MOSAiC", "✅ 完了", ""))
@@ -1323,13 +1332,16 @@ async def async_run_all_scrapers():
             print(f"Error scraping Shimokitazawa MOSAiC: {e}")
             results.append(("下北沢MOSAiC", "❌ 失敗", str(e)))
         finally:
+            if page: await page.close()
             db_mosaic.close()
 
         await asyncio.sleep(VENUE_INTERVAL_SLEEP)
 
-        # 8. Shimokitazawa CLUB251
+        # 6. Shimokitazawa CLUB251
         db_251 = SessionLocal()
+        page = None
         try:
+            page = await browser.new_page()
             count = await scrape_club251_events(page, db_251, youtube_fetch_count, pending_reports)
             youtube_fetch_count = count
             results.append(("下北沢CLUB251", "✅ 完了", ""))
@@ -1338,6 +1350,7 @@ async def async_run_all_scrapers():
             print(f"Error scraping Shimokitazawa CLUB251: {e}")
             results.append(("下北沢CLUB251", "❌ 失敗", str(e)))
         finally:
+            if page: await page.close()
             db_251.close()
                 
         
