@@ -28,6 +28,7 @@ function App() {
   const [isPassModalOpen, setIsPassModalOpen] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false)
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false)
   const [showOnlyLiked, setShowOnlyLiked] = useState(false)
   const [showOnlyFree, setShowOnlyFree] = useState(false)
   const [authMode, setAuthMode] = useState('login') // 'login' or 'signup'
@@ -1145,7 +1146,7 @@ function App() {
                       if (deferredPrompt) {
                         handleInstallClick();
                       } else {
-                        setIsAboutModalOpen(true);
+                        setIsInstallModalOpen(true);
                       }
                     }}
                     style={{
@@ -1545,6 +1546,82 @@ function App() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PWA Install Modal (Standalone) --- */}
+      {isInstallModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsInstallModalOpen(false)}>
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{ height: 'auto', maxHeight: '80vh' }}
+          >
+            <div className="modal-header">
+              <h3><Smartphone size={20} /> ホーム画面に追加</h3>
+              <button className="close-btn" onClick={() => setIsInstallModalOpen(false)}>&times;</button>
+            </div>
+            <div className="modal-body" style={{ padding: '32px 24px', color: 'var(--text-primary)' }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <div style={{ 
+                  background: 'var(--accent-color)', 
+                  width: '64px', 
+                  height: '64px', 
+                  borderRadius: '16px', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justify-content: 'center', 
+                  margin: '0 auto 16px',
+                  boxShadow: '0 8px 16px rgba(255, 51, 102, 0.2)' 
+                }}>
+                  <Download size={32} color="white" />
+                </div>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '8px' }}>ドアチケをアプリとして使う</h2>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  ブラウザの枠を消して、フルスクリーンの専用アプリのように快適に利用できます。
+                </p>
+              </div>
+
+              {isInstallable && deferredPrompt ? (
+                <button 
+                  className="primary-btn" 
+                  onClick={handleInstallClick}
+                  style={{ width: '100%', height: '54px', borderRadius: '12px', fontSize: '1.1rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                >
+                  <Download size={20} /> 今すぐインストール
+                </button>
+              ) : isIOS && isSafari ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--control-border)' }}>
+                    <div style={{ background: 'var(--accent-color)', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem', fontWeight: 'bold' }}>1</div>
+                    <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
+                      Safari下の <strong>共有ボタン</strong> <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', fontSize: '0.85rem' }}>📤</span> をタップ
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--control-border)' }}>
+                    <div style={{ background: 'var(--accent-color)', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem', fontWeight: 'bold' }}>2</div>
+                    <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
+                      メニューを下にスクロールし<br/><strong>「ホーム画面に追加」</strong> を選択
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '20px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px dashed var(--control-border)', textAlign: 'center' }}>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                    ブラウザメニューの<br/><strong>「ホーム画面に追加」</strong><br/>または<strong>「インストール」</strong><br/>からアプリとして追加してください。
+                  </p>
+                </div>
+              )}
+
+              <button
+                className="secondary-btn"
+                onClick={() => setIsInstallModalOpen(false)}
+                style={{ marginTop: '24px', width: '100%', height: '50px', borderRadius: '12px', fontSize: '1rem', fontWeight: '600', opacity: 0.7 }}
+              >
+                あとで
+              </button>
             </div>
           </div>
         </div>
@@ -2098,9 +2175,9 @@ function App() {
           </div>
           <button 
             className="install-banner-btn"
-            onClick={() => setIsAboutModalOpen(true)}
+            onClick={() => setIsInstallModalOpen(true)}
           >
-            使い方
+            追加する
           </button>
         </div>
       )}
