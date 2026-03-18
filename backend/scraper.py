@@ -923,8 +923,21 @@ async def scrape_mosaic_events(page, db_session, youtube_fetch_count, pending_re
                     if hour >= 21 or hour < 4: is_midnight = True
                 except: pass
 
-            # OGP for Image
-            image_url = fetch_og_image(ticket_url) if ticket_url else None
+            # Image: Try to find img tags in the container first
+            image_url = None
+            img_elem = await container.query_selector('img')
+            if img_elem:
+                src = await img_elem.get_attribute('src')
+                if src:
+                    if src.startswith('http'):
+                        image_url = src
+                    else:
+                        # Prepend base URL for relative paths (e.g., img/schedule/...)
+                        image_url = "https://mu-seum.co.jp/" + src.lstrip('/')
+            
+            # OGP for Image fallback
+            if not image_url and ticket_url:
+                image_url = fetch_og_image(ticket_url)
 
             # Video Data
             artist_info_list, youtube_fetch_count = get_artist_video_info(

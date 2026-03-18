@@ -88,6 +88,13 @@ function App() {
   // PWA Install states
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(() => {
+    try {
+      return localStorage.getItem('installBannerDismissed') !== 'true';
+    } catch {
+      return true;
+    }
+  });
 
   // Platform detection
   const isIOS = useMemo(() => {
@@ -96,6 +103,10 @@ function App() {
 
   const isSafari = useMemo(() => {
     return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  }, []);
+
+  const isMobile = useMemo(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   }, []);
 
   const isStandalone = useMemo(() => {
@@ -176,7 +187,10 @@ function App() {
       "東京": ["渋谷", "新宿", "下北沢"]
     })
 
-    return () => window.removeEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, [])
 
   // Update URL params when filters change
@@ -412,7 +426,6 @@ function App() {
               open_time: evt.open_time,
               start_time: evt.start_time,
               price_info: evt.price_info,
-              ticket_url: evt.ticket_url,
               ticket_url: evt.ticket_url,
               coupon_url: evt.coupon_url,
               is_pr: evt.is_pr,
@@ -1125,7 +1138,7 @@ function App() {
                   }} 
                   onClick={() => setIsAboutModalOpen(true)}
                 />
-                {!isStandalone && isInstallable && (
+                {!isStandalone && (isInstallable || (isMobile && !isStandalone)) && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -2060,6 +2073,35 @@ function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* --- Mobile Install Banner --- */}
+      {showInstallBanner && !isStandalone && isMobile && (
+        <div className="mobile-install-banner">
+          <button 
+            className="install-banner-close" 
+            onClick={() => {
+              setShowInstallBanner(false);
+              localStorage.setItem('installBannerDismissed', 'true');
+            }}
+          >
+            <X size={14} />
+          </button>
+          <div className="install-banner-content">
+            <div className="install-banner-icon">
+              <Download size={22} />
+            </div>
+            <div className="install-banner-text">
+              <h4>ホーム画面に追加</h4>
+              <p>アプリとして快適に利用できます</p>
+            </div>
+          </div>
+          <button 
+            className="install-banner-btn"
+            onClick={() => setIsAboutModalOpen(true)}
+          >
+            使い方
+          </button>
         </div>
       )}
     </div>
