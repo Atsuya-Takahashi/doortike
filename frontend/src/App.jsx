@@ -1441,7 +1441,7 @@ function App() {
             </a>
           </div>
           <div className="footer-copyright">
-            &copy; {new Date().getFullYear()} LIVE INFO HUB. All Rights Reserved.
+            &copy; {new Date().getFullYear()} DOORTIKE. All Rights Reserved.
           </div>
         </footer>
 
