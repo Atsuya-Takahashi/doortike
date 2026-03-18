@@ -2120,7 +2120,7 @@ function App() {
         </div>
       )}
       {/* --- Mobile Install Banner --- */}
-      {showInstallBanner && isMobile && (
+      {true && (
         <div className="mobile-install-banner">
           <button 
             className="install-banner-close" 
