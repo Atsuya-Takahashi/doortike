@@ -91,7 +91,20 @@ function App() {
   const [isInstallable, setIsInstallable] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(() => {
     try {
-      return localStorage.getItem('installBannerDismissed') !== 'true';
+      const dismissedAt = localStorage.getItem('installBannerDismissed');
+      // If not dismissed yet, show it
+      if (!dismissedAt) return true;
+      
+      // Backward compatibility: if it was set to 'true' (old behavior), 
+      // treat it as dismissed long ago and reset to current time to start a cycle
+      if (dismissedAt === 'true') return false; 
+
+      const lastDismissed = parseInt(dismissedAt, 10);
+      const now = Date.now();
+      const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+      
+      // Show again if more than 7 days passed
+      return now - lastDismissed > SEVEN_DAYS;
     } catch {
       return true;
     }
@@ -2126,7 +2139,7 @@ function App() {
             className="install-banner-close" 
             onClick={() => {
               setShowInstallBanner(false);
-              localStorage.setItem('installBannerDismissed', 'true');
+              localStorage.setItem('installBannerDismissed', Date.now().toString());
             }}
           >
             <X size={14} />
