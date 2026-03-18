@@ -1592,20 +1592,25 @@ function App() {
                 >
                   <Download size={20} /> 今すぐインストール
                 </button>
-              ) : isIOS && isSafari ? (
+              ) : isIOS ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--control-border)' }}>
                     <div style={{ background: 'var(--accent-color)', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem', fontWeight: 'bold' }}>1</div>
                     <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
-                      Safari下の <strong>共有ボタン</strong> <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', fontSize: '0.85rem' }}>📤</span> をタップ
+                      ブラウザの <strong>共有ボタン</strong> <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 8px', background: 'rgba(255,255,255,0.1)', borderRadius: '6px', fontSize: '0.85rem' }}>📤</span> をタップ
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--control-border)' }}>
                     <div style={{ background: 'var(--accent-color)', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.9rem', fontWeight: 'bold' }}>2</div>
                     <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
-                      メニューを下にスクロールし<br/><strong>「ホーム画面に追加」</strong> を選択
+                      メニューから <strong>「ホーム画面に追加」</strong> を選択
                     </div>
                   </div>
+                 {!isSafari && (
+                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', padding: '0 8px', textAlign: 'center' }}>
+                     ※「共有」ボタンはアドレスバー付近にある場合があります。
+                   </div>
+                 )}
                 </div>
               ) : (
                 <div style={{ padding: '20px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px dashed var(--control-border)', textAlign: 'center' }}>
