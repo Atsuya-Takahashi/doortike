@@ -1,0 +1,84 @@
+/Users/takahashiatsuya/Library/Python/3.9/lib/python/site-packages/google/api_core/_python_version_support.py:246: FutureWarning: You are using a non-supported Python version (3.9.6). Google will not post any further updates to google.api_core supporting this Python version. Please upgrade to the latest Python version, or at least Python 3.10, and then update google.api_core.
+  warnings.warn(message, FutureWarning)
+/Users/takahashiatsuya/Library/Python/3.9/lib/python/site-packages/google/auth/__init__.py:54: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+/Users/takahashiatsuya/Library/Python/3.9/lib/python/site-packages/google/oauth2/__init__.py:40: FutureWarning: You are using a Python version 3.9 past its end of life. Google will update google-auth with critical bug fixes on a best-effort basis, but not with any other fixes or features. Please upgrade your Python version, and then update google-auth.
+  warnings.warn(eol_message.format("3.9"), FutureWarning)
+/Users/takahashiatsuya/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+=== Starting Daily Scraper Routine ===
+
+--- Phase 1: Scraping Livehouses ---
+[Scraper] Launching browser...
+[Scraper] Creating new page...
+[Scraper] Browser and page initialized.
+[Scraper] Fetching pending video reports via direct SQL...
+[Scraper] Error fetching reports via direct SQL: connection to server at "pqnorxvlirdollepxkhf.supabase.co" (104.18.38.10), port 5432 failed: timeout expired
+connection to server at "pqnorxvlirdollepxkhf.supabase.co" (172.64.149.246), port 5432 failed: timeout expired
+
+[Scraper] Proceeding to livehouse scraping...
+[新宿LOFT] Starting scrape at https://www.loft-prj.co.jp/schedule/loft/schedule
+[新宿LOFT] Navigating to https://www.loft-prj.co.jp/schedule/loft/schedule...
+[新宿LOFT] Navigation successful. Waiting for selector...
+[新宿LOFT] Selector found.
+[新宿LOFT] Error initializing livehouse: (psycopg2.OperationalError) connection to server at "pqnorxvlirdollepxkhf.supabase.co" (104.18.38.10), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "pqnorxvlirdollepxkhf.supabase.co" (172.64.149.246), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[下北沢SHELTER] Starting scrape at https://www.loft-prj.co.jp/schedule/shelter/schedule
+[下北沢SHELTER] Navigating to https://www.loft-prj.co.jp/schedule/shelter/schedule...
+[下北沢SHELTER] Navigation successful. Waiting for selector...
+[下北沢SHELTER] Selector found.
+[下北沢SHELTER] Error initializing livehouse: (psycopg2.OperationalError) connection to server at "pqnorxvlirdollepxkhf.supabase.co" (104.18.38.10), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "pqnorxvlirdollepxkhf.supabase.co" (172.64.149.246), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[Flowers LOFT] Starting scrape at https://www.loft-prj.co.jp/schedule/flowersloft/schedule
+[Flowers LOFT] Navigating to https://www.loft-prj.co.jp/schedule/flowersloft/schedule...
+[Flowers LOFT] Navigation successful. Waiting for selector...
+[Flowers LOFT] Selector found.
+[Flowers LOFT] Error initializing livehouse: (psycopg2.OperationalError) connection to server at "pqnorxvlirdollepxkhf.supabase.co" (104.18.38.10), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "pqnorxvlirdollepxkhf.supabase.co" (172.64.149.246), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+Scraping 下北沢ERA at http://s-era.jp/schedule
+[下北沢ERA] Error fetching livehouse: (psycopg2.OperationalError) connection to server at "pqnorxvlirdollepxkhf.supabase.co" (104.18.38.10), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "pqnorxvlirdollepxkhf.supabase.co" (172.64.149.246), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[下北沢MOSAiC] Fetching https://mu-seum.co.jp/schedule.html...
+Error scraping Shimokitazawa MOSAiC: (psycopg2.OperationalError) connection to server at "pqnorxvlirdollepxkhf.supabase.co" (104.18.38.10), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "pqnorxvlirdollepxkhf.supabase.co" (172.64.149.246), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+[下北沢CLUB251] Fetching https://club251.com/schedule/...
+Error scraping Shimokitazawa CLUB251: (psycopg2.OperationalError) connection to server at "pqnorxvlirdollepxkhf.supabase.co" (104.18.38.10), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "pqnorxvlirdollepxkhf.supabase.co" (172.64.149.246), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+[Sync] Starting prioritized artist video sync...
+Error during scraping: (psycopg2.OperationalError) connection to server at "pqnorxvlirdollepxkhf.supabase.co" (104.18.38.10), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "pqnorxvlirdollepxkhf.supabase.co" (172.64.149.246), port 5432 failed: Operation timed out
+	Is the server running on that host and accepting TCP/IP connections?
+
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+--- Phase 2: Updating YouTube Links ---
+WARNING: YOUTUBE_API_KEY environment variable is missing.
+Skipping YouTube updates. Configure this in GitHub Actions Secrets to enable.
+
+=== Daily Scraper Routine Completed ===
