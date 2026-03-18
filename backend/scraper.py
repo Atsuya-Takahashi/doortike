@@ -366,7 +366,7 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
                 video_id = artist.youtube_video_id if artist else None
         else:
             # 3. キャッシュ利用 (有効期限内)
-            video_id = artist.youtube_video_id
+            video_id = artist.youtube_video_id if artist else None
 
         artist_list.append({"name": artist_name, "youtube_id": video_id})
 
@@ -1116,6 +1116,148 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
 
 
 
+async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pending_reports: Optional[Dict] = None) -> int:
+    """
+    Scraper for Shimokitazawa Shangri-La (https://www.shan-gri-la.jp/tokyo/category/schedule/)
+    """
+    venue_name = "下北沢シャングリラ"
+    base_url = "https://www.shan-gri-la.jp/tokyo/category/schedule/"
+    print(f"Scraping {venue_name} at {base_url}")
+    
+    # JST logic
+    now_jst = datetime.utcnow() + timedelta(hours=9)
+    target_dates = [now_jst, now_jst + timedelta(days=1)]
+    
+    try:
+        livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
+        if not livehouse:
+            print(f"[{venue_name}] Livehouse not found in DB!")
+            return youtube_fetch_count
+        livehouse_id = livehouse.id
+    except Exception as e:
+        print(f"[{venue_name}] Error fetching livehouse: {e}")
+        return youtube_fetch_count
+
+    try:
+        await page.goto(base_url, wait_until="networkidle", timeout=30000)
+        await page.wait_for_selector('div[id^="post-"]', timeout=15000)
+    except Exception as e:
+        print(f"[{venue_name}] Page load or selector failed: {e}")
+        return youtube_fetch_count
+
+    posts = await page.query_selector_all('div[id^="post-"]')
+    
+    for post in posts:
+        try:
+            # 1. Date from h2.post-title (Format: 3/18(水))
+            date_elem = await post.query_selector("h2.post-title")
+            if not date_elem: continue
+            date_text = (await date_elem.text_content()).strip()
+            
+            date_match = re.search(r'(\d{1,2})/(\d{1,2})', date_text)
+            if not date_match: continue
+            
+            month, day = int(date_match.group(1)), int(date_match.group(2))
+            event_date = now_jst.replace(month=month, day=day)
+            
+            # Check if it's today or tomorrow
+            found_date = None
+            for target_date in target_dates:
+                if event_date.date() == target_date.date():
+                    found_date = target_date
+                    break
+            if not found_date: continue
+
+            # 2. Content from .post-content-content
+            content_elem = await post.query_selector(".post-content-content")
+            if not content_elem: continue
+            
+            # Get text lines
+            content_text = await content_elem.inner_text()
+            lines = [l.strip() for l in content_text.split('\n') if l.strip()]
+            
+            title = lines[0] if lines else "Unknown Title"
+            # Performers
+            performers_str = title
+            if len(lines) > 1:
+                p_candidates = []
+                for line in lines[1:]:
+                    if any(k in line.upper() for k in ["OPEN", "START", "前売", "当日", "ADV", "DOOR", "TICKET"]):
+                        break
+                    p_candidates.append(line)
+                if p_candidates:
+                    performers_str = " / ".join(p_candidates)
+
+            # 3. Times
+            open_time, start_time = "", ""
+            time_match = re.search(r'OPEN\s*(\d{2}:\d{2})\s*/\s*START\s*(\d{2}:\d{2})', content_text, re.IGNORECASE)
+            if time_match:
+                open_time, start_time = time_match.groups()
+            
+            # 4. Price
+            price_info = ""
+            for line in lines:
+                if any(k in line for k in ["前売", "当日", "ADV", "DOOR", "￥", "¥"]):
+                    price_info = sanitize_price_info(line)
+                    break
+            
+            # 5. Ticket URL
+            ticket_url = None
+            links = await content_elem.query_selector_all("a")
+            for link in links:
+                href = await link.get_attribute("href")
+                if href and any(d in href for d in ["livepocket.jp", "ticketdive.com", "tiget.net", "eplus.jp"]):
+                    ticket_url = href
+                    break
+            
+            # 6. Image
+            image_url = None
+            img_elem = await post.query_selector("img")
+            if img_elem:
+                image_url = await img_elem.get_attribute("src")
+
+            # OGP Fallback
+            if not image_url and ticket_url:
+                image_url = fetch_og_image(ticket_url)
+
+            # Late night check
+            is_midnight = False
+            time_to_check = start_time or open_time
+            if time_to_check:
+                try:
+                    hour = int(time_to_check.split(':')[0])
+                    if hour >= 21 or hour < 4:
+                        is_midnight = True
+                except:
+                    pass
+
+            # Artist Video Data
+            artist_info_list, youtube_fetch_count = get_artist_video_info(
+                db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True
+            )
+
+            # Prepare event data for upsert
+            event_data = {
+                'title': title,
+                'date': found_date.date(),
+                'performers': performers_str,
+                'open_time': open_time,
+                'start_time': start_time,
+                'price_info': price_info,
+                'ticket_url': ticket_url,
+                'is_midnight': is_midnight,
+                'artists_data': artist_info_list,
+                'image_url': image_url
+            }
+            upsert_event(db_session, event_data, livehouse_id)
+
+        except Exception as ie:
+            print(f"[{venue_name}] Error in item loop: {ie}")
+            db_session.rollback()
+
+    return youtube_fetch_count
+
+
 def sync_prioritized_artist_videos(db_session, youtube_fetch_count: int) -> int:
     """
     開催日が近いイベントの出演者を優先してYouTube動画を取得・同期する。
@@ -1365,6 +1507,24 @@ async def async_run_all_scrapers():
         finally:
             if page: await page.close()
             db_251.close()
+        
+        await asyncio.sleep(VENUE_INTERVAL_SLEEP)
+
+        # 7. Shimokitazawa Shangri-La
+        db_shangrila = SessionLocal()
+        page = None
+        try:
+            page = await browser.new_page()
+            count = await scrape_shangrila_events(page, db_shangrila, youtube_fetch_count, pending_reports)
+            youtube_fetch_count = count
+            results.append(("下北沢シャングリラ", "✅ 完了", ""))
+        except Exception as e:
+            db_shangrila.rollback()
+            print(f"Error scraping Shimokitazawa Shangri-La: {e}")
+            results.append(("下北沢シャングリラ", "❌ 失敗", str(e)))
+        finally:
+            if page: await page.close()
+            db_shangrila.close()
                 
         
         # --- Sync Prioritized Videos ---
