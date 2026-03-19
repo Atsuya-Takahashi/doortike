@@ -846,7 +846,14 @@ async def scrape_reg_events(page, db_session, youtube_fetch_count: int, pending_
                 m_time = re.search(r'OPEN\s*/\s*START\s*(\d{2}:\d{2})\s*/\s*(\d{2}:\d{2})', tp_text, re.IGNORECASE)
                 if m_time:
                     open_time, start_time = m_time.groups()
-                price_info = sanitize_price_info(tp_text)
+                
+                # Filter out lines that contain time information to avoid duplication in price_info
+                price_lines = []
+                for line in tp_text.split('\n'):
+                    if any(k in line.upper() for k in ["OPEN", "START"]) and any(re.search(r'\d{2}:\d{2}', line) for _ in [1]):
+                        continue
+                    price_lines.append(line)
+                price_info = sanitize_price_info("\n".join(price_lines))
 
             # Performers from .performer_name
             performers_str = ""
