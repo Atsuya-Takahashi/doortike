@@ -682,6 +682,9 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
                 base_text = content_text[:part_markers[0].start()].strip()
                 lines = [l.strip() for l in base_text.split('\n') if l.strip()]
                 base_title = lines[0] if lines else "Unknown"
+                # For performers, exclude the title if there are other lines
+                real_p_list = lines[1:] if len(lines) > 1 else lines
+                base_performers = " / ".join(real_p_list)
                 
                 for i in range(len(part_markers)):
                     start_idx = part_markers[i].start()
@@ -692,7 +695,7 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
                     event_slots.append({
                         'title_prefix': f"{base_title} {part_label}",
                         'content': part_content,
-                        'base_performers': base_text
+                        'base_performers': base_performers
                     })
             else:
                 # Check for multiple OPEN/START patterns even without 【X部】
