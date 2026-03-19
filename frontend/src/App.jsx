@@ -99,6 +99,8 @@ function App() {
     }
   })
 
+  const [zoomedImage, setZoomedImage] = useState(null)
+
   const [bookmarkedEvents, setBookmarkedEvents] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('bookmarkedEvents') || '[]')
@@ -356,7 +358,9 @@ function App() {
               "addressCountry": "JP"
             }
           },
-          "image": evt.image_url || "https://doortike.com/ogp.png",
+          "image": evt.image_url 
+            ? (evt.image_url.startsWith('https') ? evt.image_url : `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}&default=https://doortike.com/ogp.png`)
+            : "https://doortike.com/ogp.png",
           "description": `${evt.livehouse.name}で開催されるライブ情報。出演: ${Array.isArray(evt.artists_data) ? evt.artists_data.map(a => a?.name).filter(Boolean).join(', ') : '各アーティスト'}`,
           "offers": {
             "@type": "Offer",
@@ -1355,6 +1359,7 @@ function App() {
                   isEventBookmarked={isEventBookmarked}
                   toggleBookmark={toggleBookmark}
                   setVideoModal={setVideoModal}
+                  setZoomedImage={setZoomedImage}
                   reportedVideos={reportedVideos}
                   userPassType={userPassType}
                   handleCouponClick={() => userPassType ? setIsPassModalOpen(true) : setIsPurchaseModalOpen(true)}
@@ -1381,6 +1386,7 @@ function App() {
                       isEventBookmarked={isEventBookmarked}
                       toggleBookmark={toggleBookmark}
                       setVideoModal={setVideoModal}
+                      setZoomedImage={setZoomedImage}
                       reportedVideos={reportedVideos}
                       userPassType={userPassType}
                       handleCouponClick={() => userPassType ? setIsPassModalOpen(true) : setIsPurchaseModalOpen(true)}
@@ -1409,6 +1415,7 @@ function App() {
                       isEventBookmarked={isEventBookmarked}
                       toggleBookmark={toggleBookmark}
                       setVideoModal={setVideoModal}
+                      setZoomedImage={setZoomedImage}
                       reportedVideos={reportedVideos}
                       userPassType={userPassType}
                       handleCouponClick={() => userPassType ? setIsPassModalOpen(true) : setIsPurchaseModalOpen(true)}
@@ -1501,6 +1508,25 @@ function App() {
         </div>
       )}
 
+      {/* --- Flyer Zoom Modal --- */}
+      {zoomedImage && (
+        <div 
+          className={`flyer-zoom-overlay ${zoomedImage ? 'active' : ''}`}
+          onClick={() => setZoomedImage(null)}
+        >
+          <div className="flyer-zoom-content">
+            <img 
+              src={zoomedImage 
+                ? (zoomedImage.startsWith('https') ? zoomedImage : `https://images.weserv.nl/?url=${encodeURIComponent(zoomedImage)}&default=https://doortike.com/ogp.png`)
+                : "https://doortike.com/ogp.png"} 
+              alt="Flyer Zoom"
+              className="flyer-zoom-image"
+              style={{ cursor: 'zoom-out' }}
+            />
+          </div>
+        </div>
+      )}
+
       {isBookmarksModalOpen && (
         <div className="modal-overlay" onClick={() => setIsBookmarksModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -1543,6 +1569,7 @@ function App() {
                               isEventBookmarked={isEventBookmarked}
                               toggleBookmark={toggleBookmark}
                               setVideoModal={setVideoModal}
+                              setZoomedImage={setZoomedImage}
                               reportedVideos={reportedVideos}
                               userPassType={userPassType}
                               handleCouponClick={() => userPassType ? setIsPassModalOpen(true) : setIsPurchaseModalOpen(true)}
@@ -2199,7 +2226,8 @@ const EventCard = ({
   toggleVenueLike, 
   isEventBookmarked, 
   toggleBookmark, 
-  setVideoModal, 
+  setVideoModal,
+  setZoomedImage,
   reportedVideos, 
   userPassType, 
   handleCouponClick 
@@ -2528,10 +2556,11 @@ const EventCard = ({
             </div>
             {evt.image_url && (
               <img
-                src={evt.image_url.startsWith('http://') 
-                  ? `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}` 
-                  : evt.image_url}
+                src={evt.image_url 
+                  ? (evt.image_url.startsWith('https') ? evt.image_url : `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}&default=https://doortike.com/ogp.png`)
+                  : "https://doortike.com/ogp.png"}
                 alt="Thumbnail"
+                onClick={() => setZoomedImage(evt.image_url)}
                 style={{ 
                   position: 'absolute', 
                   top: 0, 
@@ -2540,7 +2569,8 @@ const EventCard = ({
                   height: '100%', 
                   objectFit: 'cover',
                   zIndex: 2,
-                  transition: 'opacity 0.3s'
+                  transition: 'opacity 0.3s',
+                  cursor: 'zoom-in'
                 }}
                 loading="lazy"
                 onError={(e) => {

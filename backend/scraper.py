@@ -18,6 +18,7 @@ import requests
 import random
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from urllib.parse import urljoin
 
 load_dotenv()
 
@@ -69,6 +70,7 @@ DAILY_FETCH_LIMIT = 90
 def fetch_og_image(url):
     """Fetch OGP image from a URL."""
     if not url: return None
+    from urllib.parse import urljoin
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
         response = requests.get(url, headers=headers, timeout=5)
@@ -78,19 +80,34 @@ def fetch_og_image(url):
         og_image = soup.find('meta', property='og:image') or soup.find('meta', attrs={'name': 'og:image'})
         if og_image and og_image.get('content'):
             img_url = og_image.get('content')
-            if "ticketdive" in img_url and "ogp.webp" in img_url:
-                pass 
+            # Check for generic TicketDive OGP
+            if "ticketdive" in img_url and ("ogp.webp" in img_url or "logo" in img_url.lower()):
+                # Try to find actual flyer in the page
+                flyer_img = soup.find('img', src=re.compile(r'playyte-ticket-prod_event'))
+                if flyer_img:
+                    return urljoin(url, flyer_img.get('src'))
             else:
                 if img_url.startswith('//'):
                     img_url = 'https:' + img_url
-                elif img_url.startswith('/'):
-                    from urllib.parse import urljoin
-                    img_url = urljoin(url, img_url)
-                return img_url
+                return urljoin(url, img_url)
             
+        # Fallback to searching for images with specific keywords if no good OG found
+        if "ticketdive.com" in url:
+            flyer_img = soup.find('img', src=re.compile(r'playyte-ticket-prod_event'))
+            if flyer_img: 
+                return urljoin(url, flyer_img.get('src'))
+        elif "livepocket.jp" in url:
+            flyer_img = soup.find('img', src=re.compile(r'event_image'))
+            if flyer_img:
+                return urljoin(url, flyer_img.get('src'))
+
         twitter_image = soup.find('meta', name='twitter:image') or soup.find('meta', attrs={'property': 'twitter:image'})
         if twitter_image and twitter_image.get('content'):
-            return twitter_image.get('content')
+            return urljoin(url, twitter_image.get('content'))
+        
+        og_image = soup.find('meta', property='og:image')
+        if og_image and og_image.get('content'):
+            return urljoin(url, og_image.get('content'))
             
     except Exception as e:
         print(f"[OGP] Error fetching {url}: {e}")
@@ -479,7 +496,9 @@ async def scrape_era_events(page, db_session, youtube_fetch_count: int, pending_
 
             image_url = None
             img_elem = await item.query_selector('.flyer img')
-            if img_elem: image_url = await img_elem.get_attribute('src')
+            if img_elem:
+                src = await img_elem.get_attribute('src')
+                if src: image_url = urljoin(base_url, src)
             
             ticket_url = None
             ticket_link = await item.query_selector('.playguides a')
@@ -553,7 +572,7 @@ async def scrape_mosaic_events(page, db_session, youtube_fetch_count, pending_re
             img_elem = await container.query_selector('img')
             if img_elem:
                 src = await img_elem.get_attribute('src')
-                image_url = src if src.startswith('http') else "https://mu-seum.co.jp/" + src.lstrip('/')
+                if src: image_url = urljoin(url, src)
             if not image_url and ticket_url: image_url = fetch_og_image(ticket_url)
 
             is_midnight = False
@@ -622,7 +641,10 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
             if ticket_url and ticket_url.startswith('/'): ticket_url = "https://club251.com" + ticket_url
             
             img_elem = await container.query_selector('img')
-            image_url = (await img_elem.get_attribute('data-src') or await img_elem.get_attribute('src')) if img_elem else None
+            image_url = None
+            if img_elem:
+                raw_img = await img_elem.get_attribute('data-src') or await img_elem.get_attribute('src')
+                if raw_img: image_url = urljoin(url, raw_img)
             if not image_url and ticket_url: image_url = fetch_og_image(ticket_url)
             
             is_midnight = False
@@ -716,7 +738,11 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
                     event_slots.append({'title_prefix': None, 'content': content_text, 'base_performers': None})
 
             img_elem = await post.query_selector("img")
-            image_url = await img_elem.get_attribute("src") if img_elem else None
+            image_url = None
+            if img_elem:
+                raw_src = await img_elem.get_attribute("src")
+                if raw_src:
+                    image_url = urljoin(base_url, raw_src)
 
             for slot in event_slots:
                 slot_content = slot['content']
