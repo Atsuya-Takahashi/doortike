@@ -782,6 +782,107 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
         except: db_session.rollback()
     return youtube_fetch_count
 
+async def scrape_reg_events(page, db_session, youtube_fetch_count: int, pending_reports: Optional[Dict] = None) -> int:
+    venue_name = "下北沢Reg"
+    base_url = "https://www.reg-r2.com/?page_id=7250"
+    now_jst = datetime.utcnow() + timedelta(hours=9)
+    target_dates = [now_jst, now_jst + timedelta(days=1)]
+    
+    livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
+    if not livehouse: 
+        print(f"[Warning] {venue_name} not found in database. Skipping.")
+        return youtube_fetch_count
+    livehouse_id = livehouse.id
+
+    try:
+        await page.goto(base_url, timeout=30000, wait_until="networkidle")
+        await page.wait_for_selector('table', timeout=15000)
+    except:
+        return youtube_fetch_count
+
+    rows = await page.query_selector_all('tr')
+    for row in rows:
+        try:
+            tds = await row.query_selector_all('td')
+            if len(tds) < 2: continue
+            
+            date_text = await tds[0].text_content()
+            date_match = re.search(r'(\d{2})\s*/\s*(\d{2})', date_text)
+            if not date_match: continue
+            
+            month, day = map(int, date_match.groups())
+            event_date = None
+            for target in target_dates:
+                if target.month == month and target.day == day:
+                    event_date = target
+                    break
+            
+            if not event_date: continue
+
+            info_td = tds[1]
+            
+            # Title extraction: Prefer div.live_title
+            title = "Unknown Title"
+            title_elem = await info_td.query_selector('.live_title')
+            if title_elem:
+                # Get only the top-level text of .live_title to avoid including subtitle/times
+                title = await title_elem.evaluate("node => node.childNodes[0] ? node.childNodes[0].nodeValue : ''")
+                if not title:
+                    title = (await title_elem.text_content()).split('\n')[0].strip()
+                else:
+                    title = title.strip()
+            
+            if not title or title == "Unknown Title":
+                title_alt = await info_td.query_selector('b, strong')
+                if title_alt: title = (await title_alt.text_content()).strip()
+
+            if any(st in title.upper() for st in ["HALL RENTAL", "レンタル"]): continue
+
+            # Time and Price from .time_price
+            open_time, start_time, price_info = "", "", ""
+            tp_elem = await info_td.query_selector('.time_price')
+            if tp_elem:
+                tp_text = await tp_elem.text_content()
+                m_time = re.search(r'OPEN\s*/\s*START\s*(\d{2}:\d{2})\s*/\s*(\d{2}:\d{2})', tp_text, re.IGNORECASE)
+                if m_time:
+                    open_time, start_time = m_time.groups()
+                price_info = sanitize_price_info(tp_text)
+
+            # Performers from .performer_name
+            performers_str = ""
+            perf_elem = await info_td.query_selector('.performer_name')
+            if perf_elem:
+                p_text = await perf_elem.text_content()
+                performers_str = " / ".join([p.strip() for p in p_text.split('\n') if p.strip()])
+            
+            if not performers_str: performers_str = title
+
+            # Ticket URL from links in .pr_comment or anywhere in info_td
+            t_link = await info_td.query_selector('a[href*="tiget"], a[href*="livepocket"], a[href*="eplus"]')
+            ticket_url = await t_link.get_attribute('href') if t_link else None
+
+            image_url = None
+            if ticket_url: image_url = fetch_og_image(ticket_url)
+
+            is_midnight = False
+            if start_time or open_time:
+                try:
+                    hour = int((start_time or open_time).split(':')[0])
+                    if hour >= 21 or hour < 4: is_midnight = True
+                except: pass
+
+            artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+            event_data = {
+                'title': title, 'date': event_date.date(), 'performers': performers_str,
+                'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
+                'ticket_url': ticket_url, 'is_midnight': is_midnight, 'artists_data': artist_info_list, 'image_url': image_url
+            }
+            upsert_event(db_session, event_data, livehouse_id)
+        except:
+            db_session.rollback()
+
+    return youtube_fetch_count
+
 def sync_prioritized_artist_videos(db_session, youtube_fetch_count: int) -> int:
     print("\n[Sync] Starting prioritized artist video sync...")
     jst = timezone(timedelta(hours=9))
@@ -854,7 +955,7 @@ async def async_run_all_scrapers():
                     await page.close()
                     db_v.close()
                     await asyncio.sleep(VENUE_INTERVAL_SLEEP)
-            for v_func, v_label in [(scrape_era_events, "下北沢ERA"), (scrape_mosaic_events, "下北沢MOSAiC"), (scrape_club251_events, "下北沢CLUB251"), (scrape_shangrila_events, "下北沢シャングリラ")]:
+            for v_func, v_label in [(scrape_era_events, "下北沢ERA"), (scrape_mosaic_events, "下北沢MOSAiC"), (scrape_club251_events, "下北沢CLUB251"), (scrape_shangrila_events, "下北沢シャングリラ"), (scrape_reg_events, "下北沢Reg")]:
                 db_v = SessionLocal()
                 try:
                     page = await browser.new_page()
