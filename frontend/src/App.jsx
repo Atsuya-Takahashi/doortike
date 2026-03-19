@@ -2568,12 +2568,13 @@ const EventCard = ({
               alignItems: 'center',
               justifyContent: 'center',
               transition: 'all 0.2s',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              zIndex: 10
             }}
             onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
             onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            <Bookmark fill={isEventBookmarked(evt.id) ? "var(--accent-color)" : "none"} color={isEventBookmarked(evt.id) ? "var(--accent-color)" : "#475569"} size={18} />
+            <Bookmark fill={isEventBookmarked(evt.id) ? "var(--accent-color)" : "none"} color={isEventBookmarked(evt.id) ? "var(--accent-color)" : "var(--text-secondary)"} size={18} />
           </button>
         </div>
     </div>
