@@ -964,7 +964,9 @@ def sync_prioritized_artist_videos(db_session, youtube_fetch_count: int) -> int:
 
 def send_discord_notification(message: str):
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
-    if not webhook_url: return
+    if not webhook_url:
+        print("[Notification] WARNING: DISCORD_WEBHOOK_URL is not set. No notification will be sent.")
+        return
     try:
         requests.post(webhook_url, json={"content": message}, timeout=10).raise_for_status()
         print("[Notification] Discord notification sent.")
@@ -979,9 +981,14 @@ async def async_run_all_scrapers():
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            db_reports = SessionLocal()
-            pending_reports = {r.artist_name: r for r in db_reports.query(VideoReport).filter(VideoReport.status == 'pending').all()}
-            db_reports.close()
+            try:
+                db_reports = SessionLocal()
+                pending_reports = {r.artist_name: r for r in db_reports.query(VideoReport).filter(VideoReport.status == 'pending').all()}
+                db_reports.close()
+            except Exception as e:
+                print(f"[Sync] Pending reports fetch failed: {e}")
+                pending_reports = {}
+
             for v_key, v_label in [("loft", "新宿LOFT"), ("shelter", "下北沢SHELTER"), ("flowersloft", "Flowers LOFT")]:
                 db_v = SessionLocal()
                 try:
@@ -1018,18 +1025,28 @@ async def async_run_all_scrapers():
     except Exception as fatal_e:
         results.append(("システム全体", "🚨 致命的エラー", str(fatal_e)))
     finally:
-        db_cl = SessionLocal()
+        # Cleanup canceled events (ignore errors if db is down)
         try:
-            c_count = db_cl.query(Event).filter(Event.date >= (datetime.now(timezone(timedelta(hours=9))) - timedelta(days=1)).date(), Event.date <= (datetime.now(timezone(timedelta(hours=9))) + timedelta(days=45)).date(), Event.last_scraped_at < run_start_time, Event.status == 'published').update({"status": "cancelled"}, synchronize_session=False)
-            db_cl.commit()
-            if c_count > 0: print(f"[Cleanup] {c_count} events cancelled.")
-        except: db_cl.rollback()
-        finally: db_cl.close()
-        msg = f"📅 **スクレイピング結果集計 ({datetime.now(timezone(timedelta(hours=9))).strftime('%Y/%m/%d %H:%M')})**\n\n"
-        for v, s, e in results:
-            msg += f"- {v}: {s}" + (f" (内容: {e})" if e else "") + "\n"
-        msg += f"\n📹 YouTube取得数: {youtube_fetch_count}件 / 上限{DAILY_FETCH_LIMIT}件"
-        send_discord_notification(msg)
+            db_cl = SessionLocal()
+            try:
+                c_count = db_cl.query(Event).filter(Event.date >= (datetime.now(timezone(timedelta(hours=9))) - timedelta(days=1)).date(), Event.date <= (datetime.now(timezone(timedelta(hours=9))) + timedelta(days=45)).date(), Event.last_scraped_at < run_start_time, Event.status == 'published').update({"status": "cancelled"}, synchronize_session=False)
+                db_cl.commit()
+                if c_count > 0: print(f"[Cleanup] {c_count} events cancelled.")
+            except: db_cl.rollback()
+            finally: db_cl.close()
+        except Exception as e:
+            print(f"[Cleanup] Error during event cancellation: {e}")
+
+        # Construct and send notification
+        try:
+            msg = f"📅 **スクレイピング結果集計 ({datetime.now(timezone(timedelta(hours=9))).strftime('%Y/%m/%d %H:%M')})**\n\n"
+            for v, s, e in results:
+                msg += f"- {v}: {s}" + (f" (内容: {e})" if e else "") + "\n"
+            msg += f"\n📹 YouTube取得数: {youtube_fetch_count}件 / 上限{DAILY_FETCH_LIMIT}件"
+            send_discord_notification(msg)
+        except Exception as e:
+            print(f"[Notification] Critical failure during construction: {e}")
+
 
 def run_all_scrapers():
     asyncio.run(async_run_all_scrapers())
