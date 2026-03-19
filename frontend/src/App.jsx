@@ -15,12 +15,36 @@ function App() {
   const [areasDict, setAreasDict] = useState({})
 
   // State
-  const getLogicalToday = () => {
-    return new Date() // Return actual calendar today
-  }
-  const [selectedDate, setSelectedDate] = useState(getLogicalToday())
-  const [selectedPrefecture, setSelectedPrefecture] = useState('東京')
-  const [selectedArea, setSelectedArea] = useState('All')
+  // Get initial state from URL or defaults
+  const [selectedDate, setSelectedDate] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlDate = params.get('date');
+      if (urlDate) {
+        const parsedDate = new Date(urlDate);
+        if (!isNaN(parsedDate.getTime())) return parsedDate;
+      }
+    } catch (e) {}
+    return new Date();
+  })
+
+  const [selectedPrefecture, setSelectedPrefecture] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('pref') || '東京';
+    } catch (e) {
+      return '東京';
+    }
+  })
+
+  const [selectedArea, setSelectedArea] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('area') || 'All';
+    } catch (e) {
+      return 'All';
+    }
+  })
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isBookmarksModalOpen, setIsBookmarksModalOpen] = useState(false)
@@ -84,6 +108,7 @@ function App() {
   })
 
   const [isLoading, setIsLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(null)
   const [videoModal, setVideoModal] = useState(null) // { artistName, loading, videoId, reported, eventId, ticketUrl, isConfirming }
 
   // PWA Install states
@@ -188,25 +213,6 @@ function App() {
       setPath(window.location.pathname)
     }
     window.addEventListener('popstate', handlePopState)
-
-    // Parse URL on mount
-    const params = new URLSearchParams(window.location.search);
-    const urlPref = params.get('pref');
-    if (urlPref) setSelectedPrefecture(urlPref);
-    
-    const urlArea = params.get('area');
-    if (urlArea) setSelectedArea(urlArea);
-    
-    const urlDate = params.get('date');
-    if (urlDate) {
-      const parsedDate = new Date(urlDate);
-      if (!isNaN(parsedDate.getTime())) {
-        setSelectedDate(parsedDate);
-      }
-    }
-    
-    const urlFree = params.get('free');
-    if (urlFree === 'true') setShowOnlyFree(true);
 
     // PWA Install prompt listener
     const handleBeforeInstallPrompt = (e) => {
@@ -445,9 +451,11 @@ function App() {
         
         if (error) {
           console.error("Supabase error fetching events:", error)
+          setFetchError(error.message || "データの取得に失敗しました")
           setIsLoading(false)
           return
         }
+        setFetchError(null)
 
         let fetchedEvents = data || []
 
@@ -484,6 +492,7 @@ function App() {
         setEvents(formattedEvents)
       } catch (err) {
         console.error("Unknown error catching events:", err)
+        setFetchError("予期せぬエラーが発生しました")
       } finally {
         setIsLoading(false)
       }
@@ -1311,6 +1320,19 @@ function App() {
         <div className="event-list">
           {isLoading ? (
             <div className="empty-state">読み込み中...</div>
+          ) : fetchError ? (
+            <div className="glass-panel empty-state" style={{ borderColor: 'rgba(255, 51, 102, 0.3)' }}>
+              <X size={40} color="var(--accent-color)" style={{ marginBottom: '15px', opacity: 0.8 }} />
+              <p style={{ color: 'var(--text-primary)', fontWeight: '600' }}>エラーが発生しました</p>
+              <p style={{ fontSize: '0.85rem', marginTop: '8px' }}>{fetchError}</p>
+              <button 
+                className="footer-link" 
+                onClick={() => window.location.reload()}
+                style={{ marginTop: '20px', textDecoration: 'underline', color: 'var(--accent-color)', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                再読み込みしてリトライ
+              </button>
+            </div>
           ) : (
             <>
               {/* Today Regular */}
@@ -1395,7 +1417,7 @@ function App() {
                 </>
               )}
 
-              {groups.todayRegular.length === 0 && groups.todayMidnight.length === 0 && (
+              {groups.todayRegular.length === 0 && groups.todayMidnight.length === 0 && groups.tomorrowEvents.length === 0 && (
                 <div className="glass-panel empty-state">
                   <Calendar size={40} color="var(--text-secondary)" style={{ marginBottom: '15px', opacity: 0.5 }} />
                   <p>予定されているイベントがありません</p>
