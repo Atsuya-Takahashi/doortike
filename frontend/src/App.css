@@ -763,7 +763,9 @@
   background: #f0f4f8;
   width: 100%;
   max-width: 600px;
-  height: 94vh;
+  max-height: 90vh;
+  max-height: calc(100% - env(safe-area-inset-top, 0px) - 15px);
+  height: auto;
   border-radius: 20px 20px 0 0;
   display: flex;
   flex-direction: column;
@@ -782,11 +784,13 @@
   .modal-content {
     border-radius: 20px;
     height: 90vh;
+    max-height: 90vh;
   }
 }
 
 .modal-header {
   padding: 20px;
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1499,4 +1503,88 @@
   font-size: 14px;
   border: 2px solid #0f172a;
   cursor: pointer;
+}
+/* Flyer Zoom Modal */
+.flyer-zoom-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(8px);
+  cursor: zoom-out;
+}
+
+.flyer-zoom-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.flyer-zoom-content {
+  position: relative;
+  max-width: 95vw;
+  max-height: 95vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: scale(0.9);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.flyer-zoom-overlay.active .flyer-zoom-content {
+  transform: scale(1);
+}
+
+.flyer-zoom-image {
+  max-width: 100%;
+  max-height: 90vh;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  object-fit: contain;
+}
+
+.flyer-zoom-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: white;
+  color: #333;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10001;
+}
+
+.flyer-zoom-close:hover {
+  transform: scale(1.1) rotate(90deg);
+  background: var(--accent-color);
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .flyer-zoom-content {
+    max-width: 98vw;
+  }
+  .flyer-zoom-close {
+    top: -50px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+  }
 }

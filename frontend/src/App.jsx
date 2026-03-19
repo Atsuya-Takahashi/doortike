@@ -1530,7 +1530,7 @@ function App() {
       {isBookmarksModalOpen && (
         <div className="modal-overlay" onClick={() => setIsBookmarksModalOpen(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header" style={{ flexDirection: 'column', padding: '12px 20px 15px' }}>
+            <div className="modal-header" style={{ flexDirection: 'column', padding: 'calc(12px + env(safe-area-inset-top, 0px)) 20px 15px' }}>
               <div style={{ width: '40px', height: '5px', background: 'var(--control-border)', borderRadius: '3px', marginBottom: '15px' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                 <h3><Bookmark size={18} fill="currentColor" style={{ position: 'relative', top: '1px' }} /> 気になるイベント</h3>
@@ -1612,7 +1612,7 @@ function App() {
           <div
             className="modal-content"
             onClick={(e) => e.stopPropagation()}
-            style={{ height: 'auto', maxHeight: '80vh' }}
+            style={{ height: 'auto', maxHeight: 'min(80vh, calc(100% - env(safe-area-inset-top, 0px) - 40px))' }}
           >
             <div className="modal-header">
               <h3><Smartphone size={20} /> ホーム画面に追加</h3>
@@ -1691,7 +1691,7 @@ function App() {
       {isPurchaseModalOpen && (
         <div className="modal-overlay" onClick={() => setIsPurchaseModalOpen(false)}>
           <div className="modal-content purchase-modal" onClick={e => e.stopPropagation()} style={{ padding: '0' }}>
-            <div style={{ position: 'relative', background: 'linear-gradient(135deg, var(--accent-color) 0%, #ff4b8b 100%)', padding: '16px 20px', color: 'white', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', textAlign: 'center' }}>
+            <div style={{ position: 'relative', background: 'linear-gradient(135deg, var(--accent-color) 0%, #ff4b8b 100%)', padding: 'calc(16px + env(safe-area-inset-top, 0px)) 20px 16px', color: 'white', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', textAlign: 'center' }}>
               <button className="close-btn" onClick={() => setIsPurchaseModalOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px', color: 'white' }}><X size={20} /></button>
               <h2 style={{ margin: '0', fontSize: '1.4rem' }}>DOOR TICKET PASS</h2>
             </div>
@@ -1819,7 +1819,7 @@ function App() {
       {isAuthModalOpen && (
         <div className="modal-overlay" onClick={() => setIsAuthModalOpen(false)}>
           <div className="modal-content auth-modal" onClick={e => e.stopPropagation()} style={{ padding: '0', overflow: 'hidden', maxWidth: '400px', margin: '0 auto' }}>
-            <div className="auth-header" style={{ position: 'relative', padding: '20px 20px 5px' }}>
+            <div className="auth-header" style={{ position: 'relative', padding: 'calc(20px + env(safe-area-inset-top, 0px)) 20px 5px' }}>
               <button className="close-btn" onClick={() => setIsAuthModalOpen(false)} style={{ position: 'absolute', top: '15px', right: '15px' }}><X size={24} /></button>
               <h2 style={{ textAlign: 'center', margin: '15px 0 10px', fontSize: '1.4rem' }}>
                 {currentUser ? 'アカウント情報' : (authMode === 'login' ? 'ログイン' : '新規登録')}
@@ -2087,7 +2087,7 @@ function App() {
           <div
             className="modal-content"
             onClick={(e) => e.stopPropagation()}
-            style={{ height: 'auto', maxHeight: '90vh' }}
+            style={{ height: 'auto', maxHeight: 'min(90vh, calc(100% - env(safe-area-inset-top, 0px) - 20px))' }}
           >
             <div className="modal-header">
               <h3><BookOpen size={20} /> DOORTIKE.</h3>
