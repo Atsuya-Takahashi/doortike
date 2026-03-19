@@ -2500,15 +2500,31 @@ const EventCard = ({
             borderRadius: '0 var(--surface-radius) var(--surface-radius) 0',
             position: 'relative'
           }}>
-            {evt.image_url ? (
+            <div className="no-image-placeholder">
+              <span className="placeholder-venue-name">{evt.livehouse?.name}</span>
+              <span className="placeholder-label">NO IMAGE</span>
+            </div>
+            {evt.image_url && (
               <img
-                src={evt.image_url}
+                src={evt.image_url.startsWith('http://') 
+                  ? `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}` 
+                  : evt.image_url}
                 alt="Thumbnail"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                style={{ 
+                  position: 'absolute', 
+                  top: 0, 
+                  left: 0, 
+                  width: '100%', 
+                  height: '100%', 
+                  objectFit: 'cover',
+                  zIndex: 2,
+                  transition: 'opacity 0.3s'
+                }}
                 loading="lazy"
+                onError={(e) => {
+                  e.target.style.opacity = '0';
+                }}
               />
-            ) : (
-              <div className="no-image-placeholder">NO IMAGE</div>
             )}
           </div>
           
