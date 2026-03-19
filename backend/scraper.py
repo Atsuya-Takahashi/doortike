@@ -288,153 +288,159 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
     return artist_list, youtube_fetch_count
 
 async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, target_dates: list, db_session, youtube_fetch_count: int, pending_reports: Optional[Dict] = None) -> int:
-    base_url = f"https://www.loft-prj.co.jp/schedule/{venue_slug}/schedule"
-    print(f"Scraping {venue_name} at {base_url}")
-    await page.goto(base_url)
-    try:
-        await page.wait_for_selector('a.js-cursor-elm', timeout=10000)
-    except:
-        return youtube_fetch_count
+    unique_months = sorted(list(set((d.year, d.month) for d in target_dates)))
     
-    try:
-        livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
-        if not livehouse:
-            print(f"[Warning] LiveHouse '{venue_name}' not found in database. Skipping.")
-            return youtube_fetch_count
-        livehouse_id = livehouse.id
-    except Exception as e:
-        print(f"[Error] Database error finding livehouse '{venue_name}': {e}")
-        db_session.rollback()
-        return youtube_fetch_count
-
-    event_links = await page.query_selector_all('a.js-cursor-elm')
-    processed_hrefs = set()
-    
-    for link in event_links:
-        href = await link.get_attribute('href')
-        if not href or href in processed_hrefs: continue
-        processed_hrefs.add(href)
-        
-        time_elem = await link.query_selector('.time')
-        if not time_elem: continue
+    for year, month in unique_months:
+        # Construct monthly URL: .../schedule?yyyy=2024&mm=03
+        monthly_url = f"https://www.loft-prj.co.jp/schedule/{venue_slug}/schedule?yyyy={year}&mm={month:02d}"
+        print(f"Scraping {venue_name} at {monthly_url}")
         
         try:
-            full_date_text = await time_elem.text_content()
-            date_match = re.search(r'(\d{4})[./\s]*(\d{1,2})[./\s]*(\d{1,2})', full_date_text)
-            if date_match:
-                year_str, month_str, day_str = date_match.groups()
-                event_date = datetime.strptime(f"{year_str}-{month_str.zfill(2)}-{day_str.zfill(2)}", "%Y-%m-%d")
-            else:
-                continue
+            await page.goto(monthly_url, timeout=30000)
+            await page.wait_for_selector('a.js-cursor-elm', timeout=10000)
         except:
+            print(f"[Warning] Failed to load/find events for {venue_name} in {year}/{month}. Skipping this month.")
             continue
-            
-        found_date = None
-        for target_date in target_dates:
-            if event_date.date() == target_date.date():
-                found_date = target_date
-                break
-        if not found_date: continue
         
-        image_url = None
-        fig_img = await link.query_selector('figure img')
-        if fig_img:
-            image_url = await fig_img.get_attribute('data-src') or await fig_img.get_attribute('src')
-        if image_url:
-            if image_url.startswith('data:image') or 'pixel.gif' in image_url or 'placeholder' in image_url:
-                image_url = None
-            elif not image_url.startswith('http'):
-                image_url = f"https://www.loft-prj.co.jp{image_url}"
-
-        await wait_random()
-        detail_page = await page.context.browser.new_page()
         try:
-            await detail_page.goto(href)
-            await detail_page.wait_for_load_state("networkidle")
-            
-            title = "Unknown Title"
-            for selector in ['h1.c_title span', 'h1.c_title', 'h1.mainTitle', 'h1']:
-                title_elem = await detail_page.query_selector(selector)
-                if title_elem:
-                    t_text = await title_elem.text_content()
-                    if t_text:
-                        title = t_text.strip()
-                        break
-            
-            performers_str = ""
-            performers_list = []
-            tag_elems = await detail_page.query_selector_all('.taxList a, .taxList li, .taxonomies a, ul.tag a, ul.tag li')
-            for tag_elem in tag_elems:
-                tag_text = await tag_elem.text_content()
-                if tag_text and tag_text.strip().startswith('#'):
-                    p_name = tag_text.strip()[1:].strip()
-                    if p_name and p_name.upper() not in ["GOODS", "TICKET", "ACCESS", "SCHEDULE", "NEWS", "CONTACT"]:
-                        performers_list.append(p_name)
-            
-            if performers_list:
-                performers_str = " / ".join(performers_list)
-            else:
-                performers_elems = await detail_page.query_selector_all('.actList li')
-                if performers_elems:
-                    performers = [ (await p.text_content()).strip() for p in performers_elems if (await p.text_content()) ]
-                    performers_str = " / ".join(performers)
-            
-            if not performers_str:
-                content_elem = await detail_page.query_selector('.schedule-detail') or await detail_page.query_selector('.post-content')
-                if content_elem:
-                    content_text = await content_elem.inner_text()
-                    act_match = re.search(r'(?:ACT|出演)[:：\s]+(.*?)(?:\n\n|\r\n\r\n|$|※)', content_text, re.DOTALL | re.IGNORECASE)
-                    if act_match:
-                        performers_str = " / ".join([p.strip() for p in re.split(r'[\n／/]', act_match.group(1)) if p.strip()])
-
-            if "生誕" in title or "BD" in title or "BIRTHDAY" in title.upper():
-                main_name = title.split('生誕')[0].split('BIRTHDAY')[0].strip()
-                if main_name and main_name not in performers_str:
-                    performers_str = f"{main_name}, {performers_str}" if performers_str else main_name
-            
-            open_time, start_time = "", ""
-            time_dt_elem = await detail_page.query_selector('.open, .open-start')
-            if time_dt_elem:
-                time_text = await time_dt_elem.text_content()
-                match_open = re.search(r'OPEN\s*(\d{2}:\d{2})', time_text, re.IGNORECASE)
-                if match_open: open_time = match_open.group(1)
-                match_start = re.search(r'START\s*(\d{2}:\d{2})', time_text, re.IGNORECASE)
-                if match_start: start_time = match_start.group(1)
-                
-            price_elem = await detail_page.query_selector('.ticket_detail_box, .price')
-            price_info = sanitize_price_info(await price_elem.text_content()) if price_elem else ""
-            
-            ticket_url = None
-            for t_selector in ['.ticketList a', '.ticketWrap a', '.entry a']:
-                ticket_link_elem = await detail_page.query_selector(t_selector)
-                if ticket_link_elem:
-                    t_href = await ticket_link_elem.get_attribute('href')
-                    if t_href and any(domain in t_href for domain in ['eplus.jp', 'pia.jp', 'l-tike.com', 'tiget.net', 'livepocket.jp', 't-dv.com']):
-                        ticket_url = t_href
-                        break
-
-            if not image_url and ticket_url:
-                image_url = fetch_og_image(ticket_url)
-
-            is_midnight = False
-            time_to_check = start_time or open_time
-            if time_to_check:
-                try:
-                    hour = int(time_to_check.split(':')[0])
-                    if hour >= 21 or hour < 4: is_midnight = True
-                except: pass
-
-            artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
-            event_data = {
-                'title': title, 'date': found_date.date(), 'performers': performers_str,
-                'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
-                'ticket_url': ticket_url, 'is_midnight': is_midnight, 'artists_data': artist_info_list, 'image_url': image_url
-            }
-            upsert_event(db_session, event_data, livehouse_id)
-        except:
+            livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
+            if not livehouse:
+                print(f"[Warning] LiveHouse '{venue_name}' not found in database. Skipping.")
+                return youtube_fetch_count
+            livehouse_id = livehouse.id
+        except Exception as e:
+            print(f"[Error] Database error finding livehouse '{venue_name}': {e}")
             db_session.rollback()
-        finally:
-            await detail_page.close()
+            return youtube_fetch_count
+
+        event_links = await page.query_selector_all('a.js-cursor-elm')
+        processed_hrefs = set()
+        
+        for link in event_links:
+            href = await link.get_attribute('href')
+            if not href or href in processed_hrefs: continue
+            processed_hrefs.add(href)
+            
+            time_elem = await link.query_selector('.time')
+            if not time_elem: continue
+            
+            try:
+                full_date_text = await time_elem.text_content()
+                date_match = re.search(r'(\d{4})[./\s]*(\d{1,2})[./\s]*(\d{1,2})', full_date_text)
+                if date_match:
+                    year_str, month_str, day_str = date_match.groups()
+                    event_date = datetime.strptime(f"{year_str}-{month_str.zfill(2)}-{day_str.zfill(2)}", "%Y-%m-%d")
+                else:
+                    continue
+            except:
+                continue
+                
+            found_date = None
+            for target_date in target_dates:
+                if event_date.date() == target_date.date():
+                    found_date = target_date
+                    break
+            if not found_date: continue
+            
+            image_url = None
+            fig_img = await link.query_selector('figure img')
+            if fig_img:
+                image_url = await fig_img.get_attribute('data-src') or await fig_img.get_attribute('src')
+            if image_url:
+                if image_url.startswith('data:image') or 'pixel.gif' in image_url or 'placeholder' in image_url:
+                    image_url = None
+                elif not image_url.startswith('http'):
+                    image_url = f"https://www.loft-prj.co.jp{image_url}"
+
+            await wait_random()
+            detail_page = await page.context.browser.new_page()
+            try:
+                await detail_page.goto(href)
+                await detail_page.wait_for_load_state("networkidle")
+                
+                title = "Unknown Title"
+                for selector in ['h1.c_title span', 'h1.c_title', 'h1.mainTitle', 'h1']:
+                    title_elem = await detail_page.query_selector(selector)
+                    if title_elem:
+                        t_text = await title_elem.text_content()
+                        if t_text:
+                            title = t_text.strip()
+                            break
+                
+                performers_str = ""
+                performers_list = []
+                tag_elems = await detail_page.query_selector_all('.taxList a, .taxList li, .taxonomies a, ul.tag a, ul.tag li')
+                for tag_elem in tag_elems:
+                    tag_text = await tag_elem.text_content()
+                    if tag_text and tag_text.strip().startswith('#'):
+                        p_name = tag_text.strip()[1:].strip()
+                        if p_name and p_name.upper() not in ["GOODS", "TICKET", "ACCESS", "SCHEDULE", "NEWS", "CONTACT"]:
+                            performers_list.append(p_name)
+                
+                if performers_list:
+                    performers_str = " / ".join(performers_list)
+                else:
+                    performers_elems = await detail_page.query_selector_all('.actList li')
+                    if performers_elems:
+                        performers = [ (await p.text_content()).strip() for p in performers_elems if (await p.text_content()) ]
+                        performers_str = " / ".join(performers)
+                
+                if not performers_str:
+                    content_elem = await detail_page.query_selector('.schedule-detail') or await detail_page.query_selector('.post-content')
+                    if content_elem:
+                        content_text = await content_elem.inner_text()
+                        act_match = re.search(r'(?:ACT|出演)[:：\s]+(.*?)(?:\n\n|\r\n\r\n|$|※)', content_text, re.DOTALL | re.IGNORECASE)
+                        if act_match:
+                            performers_str = " / ".join([p.strip() for p in re.split(r'[\n／/]', act_match.group(1)) if p.strip()])
+
+                if "生誕" in title or "BD" in title or "BIRTHDAY" in title.upper():
+                    main_name = title.split('生誕')[0].split('BIRTHDAY')[0].strip()
+                    if main_name and main_name not in performers_str:
+                        performers_str = f"{main_name}, {performers_str}" if performers_str else main_name
+                
+                open_time, start_time = "", ""
+                time_dt_elem = await detail_page.query_selector('.open, .open-start')
+                if time_dt_elem:
+                    time_text = await time_dt_elem.text_content()
+                    match_open = re.search(r'OPEN\s*(\d{2}:\d{2})', time_text, re.IGNORECASE)
+                    if match_open: open_time = match_open.group(1)
+                    match_start = re.search(r'START\s*(\d{2}:\d{2})', time_text, re.IGNORECASE)
+                    if match_start: start_time = match_start.group(1)
+                    
+                price_elem = await detail_page.query_selector('.ticket_detail_box, .price')
+                price_info = sanitize_price_info(await price_elem.text_content()) if price_elem else ""
+                
+                ticket_url = None
+                for t_selector in ['.ticketList a', '.ticketWrap a', '.entry a']:
+                    ticket_link_elem = await detail_page.query_selector(t_selector)
+                    if ticket_link_elem:
+                        t_href = await ticket_link_elem.get_attribute('href')
+                        if t_href and any(domain in t_href for domain in ['eplus.jp', 'pia.jp', 'l-tike.com', 'tiget.net', 'livepocket.jp', 't-dv.com']):
+                            ticket_url = t_href
+                            break
+
+                if not image_url and ticket_url:
+                    image_url = fetch_og_image(ticket_url)
+
+                is_midnight = False
+                time_to_check = start_time or open_time
+                if time_to_check:
+                    try:
+                        hour = int(time_to_check.split(':')[0])
+                        if hour >= 21 or hour < 4: is_midnight = True
+                    except: pass
+
+                artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+                event_data = {
+                    'title': title, 'date': found_date.date(), 'performers': performers_str,
+                    'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
+                    'ticket_url': ticket_url, 'is_midnight': is_midnight, 'artists_data': artist_info_list, 'image_url': image_url
+                }
+                upsert_event(db_session, event_data, livehouse_id)
+            except:
+                db_session.rollback()
+            finally:
+                await detail_page.close()
 
     return youtube_fetch_count
 
