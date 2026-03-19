@@ -532,20 +532,26 @@
 .performer-chip-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  row-gap: 8px;
+  column-gap: 0;
   margin-bottom: 12px;
   padding-right: 5px;
+}
+
+.performer-chip-wrapper {
+  display: flex;
+  align-items: center;
 }
 
 .performer-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
-  background: rgba(var(--text-secondary-rgb), 0.04);
-  border: 1px solid rgba(var(--text-secondary-rgb), 0.12);
-  border-radius: 12px;
-  font-size: 0.76rem;
+  padding: 2px 8px;
+  background: rgba(var(--text-secondary-rgb), 0.08);
+  border: 1px solid rgba(var(--text-secondary-rgb), 0.15);
+  border-radius: 8px;
+  font-size: 0.74rem;
   font-weight: 500;
   color: var(--text-secondary);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -553,9 +559,18 @@
   max-width: 100%;
 }
 
+.chip-separator {
+  margin: 0 4px;
+  color: var(--text-secondary);
+  opacity: 0.4;
+  font-size: 0.8rem;
+  font-weight: 300;
+  user-select: none;
+}
+
 .performer-chip.has-video {
-  background: transparent;
-  border: 1px solid rgba(255, 51, 102, 0.4);
+  background: rgba(255, 51, 102, 0.03);
+  border: 1px solid rgba(255, 51, 102, 0.3);
   color: var(--accent-color);
   cursor: pointer;
 }

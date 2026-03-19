@@ -2385,19 +2385,21 @@ const EventCard = ({
                   : []);
 
               return infoList.map((perfInfo, index) => (
-                <button
-                  key={index}
-                  className={`performer-chip ${perfInfo.youtube_id ? 'has-video' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (perfInfo.youtube_id) handleVideoClick(perfInfo);
-                  }}
-                  disabled={!perfInfo.youtube_id}
-                  title={perfInfo.youtube_id ? "動画を再生" : ""}
-                >
-                  {perfInfo.youtube_id && <Play size={12} fill="currentColor" />}
-                  <span>{perfInfo.name}</span>
-                </button>
+                <div key={index} className="performer-chip-wrapper">
+                  <button
+                    className={`performer-chip ${perfInfo.youtube_id ? 'has-video' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (perfInfo.youtube_id) handleVideoClick(perfInfo);
+                    }}
+                    disabled={!perfInfo.youtube_id}
+                    title={perfInfo.youtube_id ? "動画を再生" : ""}
+                  >
+                    {perfInfo.youtube_id && <Play size={10} fill="currentColor" />}
+                    <span>{perfInfo.name}</span>
+                  </button>
+                  {index < infoList.length - 1 && <span className="chip-separator">/</span>}
+                </div>
               ));
             })()}
           </div>

@@ -8,7 +8,9 @@
   --glass-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.08);
 
   --text-primary: #102a43;
+  --text-primary-rgb: 16, 42, 67;
   --text-secondary: #486581;
+  --text-secondary-rgb: 72, 101, 129;
 
   --accent-color: #1e3a8a; /* Navy Blue */
   --accent-hover: #1e40af;
@@ -29,7 +31,9 @@
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
 
     --text-primary: #f8fafc;
+    --text-primary-rgb: 248, 250, 252;
     --text-secondary: #cbd5e1;
+    --text-secondary-rgb: 203, 213, 225;
 
     --accent-color: #3b82f6; /* Vibrant Blue for Dark Mode visibility */
     --accent-hover: #60a5fa;
