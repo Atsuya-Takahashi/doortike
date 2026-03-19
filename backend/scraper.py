@@ -66,6 +66,7 @@ def sanitize_price_info(text):
     return "\n".join(clean_lines).strip()
 
 DAILY_FETCH_LIMIT = 90
+SCRAPE_DAYS = 30
 
 def fetch_og_image(url):
     """Fetch OGP image from a URL."""
@@ -441,7 +442,7 @@ async def scrape_era_events(page, db_session, youtube_fetch_count: int, pending_
     venue_name = "下北沢ERA"
     base_url = "http://s-era.jp/schedule"
     now_jst = datetime.utcnow() + timedelta(hours=9)
-    target_dates = [now_jst, now_jst + timedelta(days=1)]
+    target_dates = [now_jst + timedelta(days=i) for i in range(SCRAPE_DAYS)]
     
     livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
     if not livehouse: return youtube_fetch_count
@@ -529,7 +530,7 @@ async def scrape_mosaic_events(page, db_session, youtube_fetch_count, pending_re
     venue_name = "下北沢MOSAiC"
     url = "https://mu-seum.co.jp/schedule.html"
     now_jst = datetime.utcnow() + timedelta(hours=9)
-    target_dates = [now_jst, now_jst + timedelta(days=1)]
+    target_dates = [now_jst + timedelta(days=i) for i in range(SCRAPE_DAYS)]
     livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
     if not livehouse: return youtube_fetch_count
     livehouse_id = livehouse.id
@@ -596,7 +597,7 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
     venue_name = "下北沢CLUB251"
     url = "https://club251.com/schedule/"
     now_jst = datetime.utcnow() + timedelta(hours=9)
-    target_dates = [now_jst, now_jst + timedelta(days=1)]
+    target_dates = [now_jst + timedelta(days=i) for i in range(SCRAPE_DAYS)]
     livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
     if not livehouse: return youtube_fetch_count
     livehouse_id = livehouse.id
@@ -668,7 +669,7 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
     venue_name = "下北沢シャングリラ"
     base_url = "https://www.shan-gri-la.jp/tokyo/category/schedule/"
     now_jst = datetime.utcnow() + timedelta(hours=9)
-    target_dates = [now_jst, now_jst + timedelta(days=1)]
+    target_dates = [now_jst + timedelta(days=i) for i in range(SCRAPE_DAYS)]
     livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
     if not livehouse: return youtube_fetch_count
     livehouse_id = livehouse.id
@@ -812,7 +813,7 @@ async def scrape_reg_events(page, db_session, youtube_fetch_count: int, pending_
     venue_name = "下北沢Reg"
     base_url = "https://www.reg-r2.com/?page_id=7250"
     now_jst = datetime.utcnow() + timedelta(hours=9)
-    target_dates = [now_jst, now_jst + timedelta(days=1)]
+    target_dates = [now_jst + timedelta(days=i) for i in range(SCRAPE_DAYS)]
     
     livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
     if not livehouse: 
@@ -967,7 +968,7 @@ def send_discord_notification(message: str):
 async def async_run_all_scrapers():
     run_start_time = datetime.now(timezone.utc)
     now_jst = run_start_time + timedelta(hours=9)
-    target_dates = [now_jst, now_jst + timedelta(days=1)]
+    target_dates = [now_jst + timedelta(days=i) for i in range(SCRAPE_DAYS)]
     youtube_fetch_count, results = 0, []
     try:
         async with async_playwright() as p:
