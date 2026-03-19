@@ -532,15 +532,9 @@
 .performer-chip-container {
   display: flex;
   flex-wrap: wrap;
-  row-gap: 8px;
-  column-gap: 0;
+  gap: 6px;
   margin-bottom: 12px;
   padding-right: 5px;
-}
-
-.performer-chip-wrapper {
-  display: flex;
-  align-items: center;
 }
 
 .performer-chip {
@@ -557,15 +551,6 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: default;
   max-width: 100%;
-}
-
-.chip-separator {
-  margin: 0 4px;
-  color: var(--text-secondary);
-  opacity: 0.4;
-  font-size: 0.8rem;
-  font-weight: 300;
-  user-select: none;
 }
 
 .performer-chip.has-video {
