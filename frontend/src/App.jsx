@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { format, addDays } from 'date-fns'
-import { MapPin, Clock, Heart, Bookmark, Calendar, ChevronRight, ChevronDown, Activity, BookOpen, Ticket, X, CheckCircle, CreditCard, ArrowUp, ArrowDown, User, ExternalLink, ArrowUpRight, Moon, Sun, Briefcase, Plane, Zap, Flame, Lock, Flag, PlusSquare, Share, Download, Smartphone } from 'lucide-react'
+import { MapPin, Clock, Heart, Bookmark, Calendar, ChevronRight, ChevronDown, Activity, BookOpen, Ticket, X, CheckCircle, CreditCard, ArrowUp, ArrowDown, User, ExternalLink, ArrowUpRight, Moon, Sun, Briefcase, Plane, Zap, Flame, Lock, Flag, PlusSquare, Share, Download, Smartphone, Play } from 'lucide-react'
 import { auth, db, googleProvider, appleProvider } from './firebase'
 import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile } from 'firebase/auth'
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'
@@ -2373,7 +2373,7 @@ const EventCard = ({
             )}
           </div>
 
-          <p className="event-performers">
+          <div className="performer-chip-container">
             {(() => {
               const infoList = evt.artists_data && evt.artists_data.length > 0
                 ? evt.artists_data.map(item => ({ 
@@ -2385,22 +2385,22 @@ const EventCard = ({
                   : []);
 
               return infoList.map((perfInfo, index) => (
-                <span key={index}>
-                  {perfInfo.youtube_id ? (
-                    <span
-                      className="performer-link"
-                      onClick={() => handleVideoClick(perfInfo)}
-                    >
-                      {perfInfo.name}
-                    </span>
-                  ) : (
-                    <span className="performer-name">{perfInfo.name}</span>
-                  )}
-                  {index < infoList.length - 1 ? <span style={{ margin: '0 6px', color: 'var(--text-secondary)' }}>/</span> : ''}
-                </span>
+                <button
+                  key={index}
+                  className={`performer-chip ${perfInfo.youtube_id ? 'has-video' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (perfInfo.youtube_id) handleVideoClick(perfInfo);
+                  }}
+                  disabled={!perfInfo.youtube_id}
+                  title={perfInfo.youtube_id ? "動画を再生" : ""}
+                >
+                  {perfInfo.youtube_id && <Play size={12} fill="currentColor" />}
+                  <span>{perfInfo.name}</span>
+                </button>
               ));
             })()}
-          </p>
+          </div>
 
           <div className="action-buttons" style={{ marginTop: 'auto', paddingTop: '8px', display: 'flex', gap: '8px', alignItems: 'center' }}>
             {evt.livehouse.drink_fee && (
