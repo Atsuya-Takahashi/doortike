@@ -671,44 +671,112 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
             content_elem = await post.query_selector(".post-content-content")
             if not content_elem: continue
             content_text = await content_elem.inner_text()
-            lines = [l.strip() for l in content_text.split('\n') if l.strip()]
-            title = lines[0] if lines else "Unknown"
-            performers_str = title
-            if len(lines) > 1:
-                p_cand = []
-                for line in lines[1:]:
-                    if any(k in line.upper() for k in ["OPEN", "START", "ADV", "DOOR"]): break
-                    p_cand.append(line)
-                if p_cand: performers_str = " / ".join(p_cand)
-
-            open_time, start_time, price_info = "", "", ""
-            m_time = re.search(r'OPEN\s*(\d{2}:\d{2})\s*/\s*START\s*(\d{2}:\d{2})', content_text, re.IGNORECASE)
-            if m_time: open_time, start_time = m_time.groups()
-            for line in lines:
-                if any(k in line for k in ["前売", "当日", "ADV", "DOOR", "￥", "¥"]):
-                    price_info = sanitize_price_info(line)
-                    break
             
-            t_link = await content_elem.query_selector('a[href*="livepocket"], a[href*="ticketdive"], a[href*="tiget"], a[href*="eplus"]')
-            ticket_url = await t_link.get_attribute("href") if t_link else None
+            # Split by parts if they exist (e.g., 【1部】, 【2部】)
+            # If no part markers, we still check for multiple time patterns
+            part_markers = list(re.finditer(r'【\d部】', content_text))
+            
+            event_slots = []
+            if part_markers:
+                # Get base performers (text before the first marker)
+                base_text = content_text[:part_markers[0].start()].strip()
+                lines = [l.strip() for l in base_text.split('\n') if l.strip()]
+                base_title = lines[0] if lines else "Unknown"
+                
+                for i in range(len(part_markers)):
+                    start_idx = part_markers[i].start()
+                    end_idx = part_markers[i+1].start() if i+1 < len(part_markers) else len(content_text)
+                    part_label = part_markers[i].group()
+                    part_content = content_text[start_idx:end_idx]
+                    
+                    event_slots.append({
+                        'title_prefix': f"{base_title} {part_label}",
+                        'content': part_content,
+                        'base_performers': base_text
+                    })
+            else:
+                # Check for multiple OPEN/START patterns even without 【X部】
+                time_matches = list(re.finditer(r'OPEN\s*\d{2}:\d{2}\s*/\s*START\s*\d{2}:\d{2}', content_text, re.IGNORECASE))
+                if len(time_matches) > 1:
+                    lines = [l.strip() for l in content_text.split('\n') if l.strip()]
+                    base_title = lines[0] if lines else "Unknown"
+                    for i in range(len(time_matches)):
+                        start_idx = time_matches[i].start()
+                        end_idx = time_matches[i+1].start() if i+1 < len(time_matches) else len(content_text)
+                        part_content = content_text[start_idx:end_idx]
+                        event_slots.append({
+                            'title_prefix': f"{base_title} (公演{i+1})",
+                            'content': part_content,
+                            'base_performers': base_title
+                        })
+                else:
+                    # Single event
+                    event_slots.append({'title_prefix': None, 'content': content_text, 'base_performers': None})
+
             img_elem = await post.query_selector("img")
             image_url = await img_elem.get_attribute("src") if img_elem else None
-            if not image_url and ticket_url: image_url = fetch_og_image(ticket_url)
 
-            is_midnight = False
-            if start_time or open_time:
-                try:
-                    hour = int((start_time or open_time).split(':')[0])
-                    if hour >= 21 or hour < 4: is_midnight = True
-                except: pass
+            for slot in event_slots:
+                slot_content = slot['content']
+                lines = [l.strip() for l in slot_content.split('\n') if l.strip()]
+                
+                # Title and performers
+                if slot['title_prefix']:
+                    title = slot['title_prefix']
+                    performers_str = slot['base_performers'] or title
+                else:
+                    title = lines[0] if lines else "Unknown"
+                    performers_str = title
+                    if len(lines) > 1:
+                        p_cand = []
+                        for line in lines[1:]:
+                            if any(k in line.upper() for k in ["OPEN", "START", "ADV", "DOOR"]): break
+                            p_cand.append(line)
+                        if p_cand: performers_str = " / ".join(p_cand)
 
-            artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
-            event_data = {
-                'title': title, 'date': found_date.date(), 'performers': performers_str,
-                'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
-                'ticket_url': ticket_url, 'is_midnight': is_midnight, 'artists_data': artist_info_list, 'image_url': image_url
-            }
-            upsert_event(db_session, event_data, livehouse_id)
+                # Times
+                open_time, start_time = "", ""
+                m_time = re.search(r'OPEN\s*(\d{2}:\d{2})\s*/\s*START\s*(\d{2}:\d{2})', slot_content, re.IGNORECASE)
+                if m_time: open_time, start_time = m_time.groups()
+                
+                # Price
+                price_info = ""
+                for line in lines:
+                    if any(k in line for k in ["前売", "当日", "ADV", "DOOR", "￥", "¥"]):
+                        price_info = sanitize_price_info(line)
+                        break
+                
+                # Ticket URL (inside this slot)
+                # Note: We need to find the link within the specific part of content_elem if possible, 
+                # but inner_text doesn't give links. We should use the slot's relative position or search in HTML.
+                ticket_url = None
+                # Simple approach: if there's only one link in the whole post, use it. 
+                # If multiple, this is tricky with inner_text splitting.
+                # Let's try to find a link that appears near the price/times in the HTML.
+                t_links = await content_elem.query_selector_all('a[href*="livepocket"], a[href*="ticketdive"], a[href*="tiget"], a[href*="eplus"]')
+                if len(t_links) == len(event_slots):
+                    idx = event_slots.index(slot)
+                    ticket_url = await t_links[idx].get_attribute("href")
+                elif t_links:
+                    ticket_url = await t_links[0].get_attribute("href")
+
+                curr_image_url = image_url
+                if not curr_image_url and ticket_url: curr_image_url = fetch_og_image(ticket_url)
+
+                is_midnight = False
+                if start_time or open_time:
+                    try:
+                        hour = int((start_time or open_time).split(':')[0])
+                        if hour >= 21 or hour < 4: is_midnight = True
+                    except: pass
+
+                artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+                event_data = {
+                    'title': title, 'date': found_date.date(), 'performers': performers_str,
+                    'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
+                    'ticket_url': ticket_url, 'is_midnight': is_midnight, 'artists_data': artist_info_list, 'image_url': curr_image_url
+                }
+                upsert_event(db_session, event_data, livehouse_id)
         except: db_session.rollback()
     return youtube_fetch_count
 
