@@ -188,17 +188,10 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
         return [], youtube_fetch_count
 
     artist_list = []
-    patterns = r'[、,／/\n]'
+    # Use standard delimiters like full-width spaces, commas, and slashes.
+    # Avoid half-width spaces as they are common in tour titles and event names.
+    patterns = r'[、,／/\n　]'
     names = [a.strip() for a in re.split(patterns, performers_str) if a.strip()]
-    
-    final_names = []
-    for n in names:
-        if ' ' in n and any(ord(c) > 127 for c in n):
-            sub_names = [sn.strip() for sn in n.split(' ') if sn.strip()]
-            final_names.extend(sub_names)
-        else:
-            final_names.append(n)
-    names = final_names
 
     for artist_name in names:
         artist_name = re.sub(r'^[【\[\(](出演|会場|開場|開演|O\.A\.|OA|Opening Act)[】\]\)]\s*', '', artist_name, flags=re.IGNORECASE)
@@ -321,7 +314,7 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
             if not href or href in processed_hrefs: continue
             processed_hrefs.add(href)
             
-            time_elem = await link.query_selector('.time')
+            time_elem = await link.query_selector('time')
             if not time_elem: continue
             
             try:
