@@ -281,12 +281,11 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
     try:
         livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
         if not livehouse:
-            livehouse = LiveHouse(name=venue_name, area="Unknown", latitude=0, longitude=0, url=f"https://www.loft-prj.co.jp/{venue_slug}/")
-            db_session.add(livehouse)
-            db_session.commit()
-            livehouse = db_session.query(LiveHouse).filter(LiveHouse.name == venue_name).first()
+            print(f"[Warning] LiveHouse '{venue_name}' not found in database. Skipping.")
+            return youtube_fetch_count
         livehouse_id = livehouse.id
-    except:
+    except Exception as e:
+        print(f"[Error] Database error finding livehouse '{venue_name}': {e}")
         db_session.rollback()
         return youtube_fetch_count
 
@@ -846,7 +845,7 @@ async def async_run_all_scrapers():
                 db_v = SessionLocal()
                 try:
                     page = await browser.new_page()
-                    youtube_fetch_count = await scrape_loft_project_venue(page, v_key, v_label, target_dates, db_v, youtube_fetch_count, pending_reports)
+                    youtube_fetch_count = await scrape_loft_project_venue(page, v_label, v_key, target_dates, db_v, youtube_fetch_count, pending_reports)
                     results.append((v_label, "✅ 完了", ""))
                 except Exception as e:
                     db_v.rollback()
