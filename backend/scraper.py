@@ -183,7 +183,7 @@ def upsert_event(db_session, event_data: dict, livehouse_id: int):
     
     db_session.commit()
 
-def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: int, pending_reports: Optional[Dict] = None, only_cache: bool = False) -> tuple[list, int]:
+def get_artist_video_info(performers_str: str, db_session, youtube_fetch_count: int, pending_reports: Optional[Dict] = None, only_cache: bool = False) -> tuple[list, int]:
     if not performers_str:
         return [], youtube_fetch_count
 
@@ -212,69 +212,74 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
         if re.match(r'^(Vo|Gt|Ba|Dr|Key|Per|Syn|Vj|DJ|Cho)[\.\-]?$', artist_name, re.IGNORECASE): continue
 
         artist = db_session.query(Artist).filter(Artist.name == artist_name).first()
+        # print(f"[Debug Query] Name: {repr(artist_name)} -> Found: {artist.name if artist else 'None'}")
         video_id = None
         report = pending_reports.get(artist_name) if pending_reports else None
 
-        if artist and artist.official_channel_id and not only_cache:
-            is_stale = not artist.youtube_updated_at or (datetime.now() - artist.youtube_updated_at) > timedelta(days=30)
-            if (is_stale or report) and youtube_fetch_count < DAILY_FETCH_LIMIT:
-                exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid] if artist.reported_video_ids else []
-                video_id = search_artist_video(artist_name, exclude_ids=exclude_ids, channel_id=artist.official_channel_id)
+        # Determine if we should fetch/refresh YouTube info
+        is_stale = False
+        if artist:
+            # Stale after 30 days if channel_id exists, 90 days otherwise
+            threshold = 30 if artist.official_channel_id else 90
+            is_stale = not artist.youtube_updated_at or (datetime.now() - artist.youtube_updated_at) > timedelta(days=threshold)
+        
+        should_fetch = not only_cache and (not artist or is_stale or report)
+
+        if should_fetch and youtube_fetch_count < DAILY_FETCH_LIMIT:
+            # Collect reported/faulty video IDs to exclude
+            exclude_ids = []
+            if artist and artist.reported_video_ids:
+                exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid]
+            
+            # If there's a report and we currently have a video ID, add it to exclude list
+            if report and artist and artist.youtube_video_id and artist.youtube_video_id not in exclude_ids:
+                exclude_ids.append(artist.youtube_video_id)
+                # Update the stored list immediately so it's not lost on search failure
+                reported_ids_set = set(exclude_ids)
+                artist.reported_video_ids = ",".join(reported_ids_set)
+                try:
+                    db_session.commit()
+                except:
+                    db_session.rollback()
+
+            try:
+                # Search for new video
+                if artist and artist.official_channel_id:
+                    video_id = search_artist_video(artist_name, exclude_ids=exclude_ids, channel_id=artist.official_channel_id)
+                else:
+                    video_id = search_artist_video(artist_name, exclude_ids=exclude_ids)
+                
                 youtube_fetch_count += 1
-                if report:
-                    db_session.query(VideoReport).filter(VideoReport.artist_name == artist_name, VideoReport.status == 'pending').update({"status": "resolved"})
-                if report and artist.youtube_video_id and artist.youtube_video_id != video_id:
-                    reported_ids = set([vid for vid in (artist.reported_video_ids or "").split(",") if vid])
-                    reported_ids.add(artist.youtube_video_id)
-                    artist.reported_video_ids = ",".join(reported_ids)
+
+                # Update or Create Artist
+                if not artist:
+                    artist = Artist(name=artist_name)
+                    db_session.add(artist)
+                
                 artist.youtube_video_id = video_id
                 artist.youtube_updated_at = datetime.now()
                 artist.is_reported = False
-                try:
-                    db_session.commit()
-                except:
-                    db_session.rollback()
-            else:
-                video_id = artist.youtube_video_id
-
-        elif report and youtube_fetch_count < DAILY_FETCH_LIMIT and not only_cache:
-            exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid] if artist and artist.reported_video_ids else []
-            video_id = search_artist_video(artist_name, exclude_ids=exclude_ids, suffix="official MV")
-            youtube_fetch_count += 1
-            db_session.query(VideoReport).filter(VideoReport.artist_name == artist_name, VideoReport.status == 'pending').update({"status": "resolved"})
-            if not artist:
-                artist = Artist(name=artist_name)
-                db_session.add(artist)
-            if artist.youtube_video_id and artist.youtube_video_id != video_id:
-                reported_ids = set([vid for vid in (artist.reported_video_ids or "").split(",") if vid])
-                reported_ids.add(artist.youtube_video_id)
-                artist.reported_video_ids = ",".join(reported_ids)
-            artist.youtube_video_id = video_id
-            artist.youtube_updated_at = datetime.now()
-            artist.is_reported = False
-            try:
+                
+                # Resolve report if exists
+                if report:
+                    db_session.query(VideoReport).filter(VideoReport.artist_name == artist_name, VideoReport.status == 'pending').update({"status": "resolved"})
+                
                 db_session.commit()
-            except:
+            except Exception as e:
                 db_session.rollback()
-
-        elif (not artist or not artist.youtube_updated_at or (datetime.now() - artist.youtube_updated_at) > timedelta(days=90)) and not only_cache:
-            if youtube_fetch_count < DAILY_FETCH_LIMIT:
-                exclude_ids = [vid for vid in artist.reported_video_ids.split(",") if vid] if artist and artist.reported_video_ids else []
-                try:
-                    video_id = search_artist_video(artist_name, exclude_ids=exclude_ids)
-                    youtube_fetch_count += 1
-                    if not artist:
-                        artist = Artist(name=artist_name)
-                        db_session.add(artist)
-                    artist.youtube_video_id = video_id
-                    artist.youtube_updated_at = datetime.now()
-                    artist.is_reported = False
-                    db_session.commit()
-                except:
-                    db_session.rollback()
-            else:
+                # print(f"[Artist] Sync failed for {artist_name}: {e}")
+                # Keep old ID but it's already in reported_video_ids for next time
                 video_id = artist.youtube_video_id if artist else None
         else:
+            # Use cached ID or Create dummy entry if not exists
+            if not artist:
+                try:
+                    artist = Artist(name=artist_name)
+                    db_session.add(artist)
+                    db_session.commit()
+                except:
+                    db_session.rollback()
+            
             video_id = artist.youtube_video_id if artist else None
 
         artist_list.append({"name": artist_name, "youtube_id": video_id})

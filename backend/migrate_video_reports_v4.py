@@ -71,17 +71,45 @@ def migrate():
             print(f"Index creation error: {e}")
             conn.rollback()
 
-        print("4. Creating RPC function 'report_video'...")
+        print("4. Creating RPC function 'report_video' with immediate hiding logic...")
         rpc_function = """
 CREATE OR REPLACE FUNCTION report_video(p_event_id INT, p_artist_name TEXT)
 RETURNS VOID AS $$
+DECLARE
+    v_clean_name TEXT;
 BEGIN
+    v_clean_name := trim(p_artist_name);
+
+    -- 1. 報告テーブルに記録
+    -- status='pending' のものがあればカウントアップ、なければ新規作成
     INSERT INTO video_reports (event_id, artist_name, status, report_count, created_at)
-    VALUES (p_event_id, p_artist_name, 'pending', 1, NOW())
+    VALUES (p_event_id, v_clean_name, 'pending', 1, NOW())
     ON CONFLICT (event_id, artist_name) WHERE status = 'pending'
     DO UPDATE SET report_count = video_reports.report_count + 1;
+
+    -- 2. アーティストテーブルのフラグを立てる（大文字小文字を無視してマッチング）
+    UPDATE artists SET is_reported = TRUE WHERE lower(name) = lower(v_clean_name);
+
+    -- 3. 全イベントの artists_data 内の youtube_id を即座に無効化する
+    -- タイムゾーンの差異を考慮し、昨日以降のすべての未完了イベントを対象とする
+    UPDATE events
+    SET artists_data = (
+        SELECT jsonb_agg(
+            CASE 
+                WHEN lower(elem->>'name') = lower(v_clean_name) THEN (elem - 'youtube_id') || jsonb_build_object('youtube_id', NULL)
+                ELSE elem 
+            END
+        )
+        FROM jsonb_array_elements(artists_data::jsonb) AS elem
+    )
+    WHERE artists_data::text ILIKE '%' || v_clean_name || '%'
+    AND date >= CURRENT_DATE - INTERVAL '1 day';
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION report_video(INT, TEXT) TO public;
+GRANT EXECUTE ON FUNCTION report_video(INT, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION report_video(INT, TEXT) TO authenticated;
 """
         try:
             conn.execute(text(rpc_function))
