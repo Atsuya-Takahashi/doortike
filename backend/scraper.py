@@ -158,7 +158,6 @@ def upsert_event(db_session, event_data: dict, livehouse_id: int):
         )
         existing_event.is_pickup = is_p
         existing_event.pickup_type = p_t
-        print(f"[Upsert] Updated: {event_data['title']} ({event_data['date']})")
     else:
         is_p, p_t = determine_pickup_status(event_data.get('performers', ""))
         new_event = Event(
@@ -429,7 +428,7 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                         if hour >= 21 or hour < 4: is_midnight = True
                     except: pass
 
-                artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+                artist_info_list, youtube_fetch_count = get_artist_video_info(performers_str, db_session, youtube_fetch_count, pending_reports, only_cache=True)
                 event_data = {
                     'title': title, 'date': found_date.date(), 'performers': performers_str,
                     'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
@@ -519,7 +518,7 @@ async def scrape_era_events(page, db_session, youtube_fetch_count: int, pending_
                     if hour >= 21 or hour < 4: is_midnight = True
                 except: pass
 
-            artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+            artist_info_list, youtube_fetch_count = get_artist_video_info(performers_str, db_session, youtube_fetch_count, pending_reports, only_cache=True)
             event_data = {
                 'title': title, 'date': found_date.date(), 'performers': performers_str,
                 'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
@@ -588,7 +587,7 @@ async def scrape_mosaic_events(page, db_session, youtube_fetch_count, pending_re
                     if hour >= 21 or hour < 4: is_midnight = True
                 except: pass
 
-            artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+            artist_info_list, youtube_fetch_count = get_artist_video_info(performers_str, db_session, youtube_fetch_count, pending_reports, only_cache=True)
             event_data = {
                 'title': title, 'date': found_date.date(), 'performers': performers_str,
                 'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
@@ -660,7 +659,7 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
                     if hour >= 21 or hour < 4: is_midnight = True
                 except: pass
 
-            artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+            artist_info_list, youtube_fetch_count = get_artist_video_info(performers_str, db_session, youtube_fetch_count, pending_reports, only_cache=True)
             event_data = {
                 'title': title, 'date': found_date.date(), 'performers': performers_str,
                 'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
@@ -700,17 +699,14 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
             content_text = await content_elem.inner_text()
             
             # Split by parts if they exist (e.g., 【1部】, 【2部】)
-            # If no part markers, we still check for multiple time patterns
             part_markers = list(re.finditer(r'【\d部】', content_text))
-            
             event_slots = []
             if part_markers:
                 # Get base performers (text before the first marker)
                 base_text = content_text[:part_markers[0].start()].strip()
-                lines = [l.strip() for l in base_text.split('\n') if l.strip()]
-                base_title = lines[0] if lines else "Unknown"
-                # For performers, exclude the title if there are other lines
-                real_p_list = lines[1:] if len(lines) > 1 else lines
+                b_lines = [l.strip() for l in base_text.split('\n') if l.strip()]
+                base_title = b_lines[0] if b_lines else "Unknown"
+                real_p_list = b_lines[1:] if len(b_lines) > 1 else b_lines
                 base_performers = " / ".join(real_p_list)
                 
                 for i in range(len(part_markers)):
@@ -718,7 +714,6 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
                     end_idx = part_markers[i+1].start() if i+1 < len(part_markers) else len(content_text)
                     part_label = part_markers[i].group()
                     part_content = content_text[start_idx:end_idx]
-                    
                     event_slots.append({
                         'title_prefix': f"{base_title} {part_label}",
                         'content': part_content,
@@ -728,8 +723,8 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
                 # Check for multiple OPEN/START patterns even without 【X部】
                 time_matches = list(re.finditer(r'OPEN\s*\d{2}:\d{2}\s*/\s*START\s*\d{2}:\d{2}', content_text, re.IGNORECASE))
                 if len(time_matches) > 1:
-                    lines = [l.strip() for l in content_text.split('\n') if l.strip()]
-                    base_title = lines[0] if lines else "Unknown"
+                    b_lines = [l.strip() for l in content_text.split('\n') if l.strip()]
+                    base_title = b_lines[0] if b_lines else "Unknown"
                     for i in range(len(time_matches)):
                         start_idx = time_matches[i].start()
                         end_idx = time_matches[i+1].start() if i+1 < len(time_matches) else len(content_text)
@@ -750,20 +745,82 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
                 if raw_src:
                     image_url = urljoin(base_url, raw_src)
 
+            # Extract all links for classification
+            all_links = await content_elem.query_selector_all('a')
+            artist_links = []
+            booking_links = []
+            for link in all_links:
+                href = await link.get_attribute("href") or ""
+                ltxt = (await link.text_content()).strip()
+                if not ltxt or ltxt in ["詳細はこちら", "公式HP", "MAP", "Twitter"]: continue
+                
+                if any(pd in href for pd in ['livepocket.jp', 'ticketdive.com', 'eplus.jp', 'pia.jp', 'l-tike.com', 'tiget.net']):
+                    booking_links.append(href)
+                elif any(sd in href for sd in ['x.com', 'twitter.com', 'instagram.com', 'facebook.com', 'youtube.com']):
+                    artist_links.append(ltxt)
+                elif not any(pd in href for pd in ['maps.google', 'google.com/maps']):
+                    # Likely official site link
+                    artist_links.append(ltxt)
+
+            # Default performers from links if available
+            link_performers_str = None
+            if artist_links:
+                seen = set()
+                p_list = []
+                for p in artist_links:
+                    p_lower = p.lower()
+                    if p_lower not in seen:
+                        p_list.append(p)
+                        seen.add(p_lower)
+                link_performers_str = " / ".join(p_list)
+            
+
+            ticket_url = booking_links[0] if booking_links else None
+
             for slot in event_slots:
                 slot_content = slot['content']
-                lines = [l.strip() for l in slot_content.split('\n') if l.strip()]
+                s_lines = [l.strip() for l in slot_content.split('\n') if l.strip()]
+                # Filter out lines that look like dates (e.g., 3/21(土))
+                s_lines = [l for l in s_lines if not re.match(r'^\d{1,2}/\d{1,2}\(.\)$', l)]
                 
                 # Title and performers
                 if slot['title_prefix']:
                     title = slot['title_prefix']
                     performers_str = slot['base_performers'] or title
                 else:
-                    title = lines[0] if lines else "Unknown"
-                    performers_str = title
-                    if len(lines) > 1:
+                    # Single slot logic
+                    cand_title = s_lines[0] if s_lines else "Unknown Title"
+                    performers_str = link_performers_str or cand_title
+                    title = cand_title
+
+                    # Refine Title: if the candidate title contains an identified performer, strip it
+                    if link_performers_str:
+                        for p in artist_links:
+                            if p in cand_title:
+                                # Strip artist name from the title string
+                                if cand_title.startswith(p):
+                                    new_t = cand_title[len(p):].strip()
+                                    if new_t:
+                                        title = new_t
+                                        break
+                                    elif len(s_lines) > 1:
+                                        # If the first line was JUST the artist name, look at the 2nd line
+                                        second_line = s_lines[1]
+                                        # But ensure the 2nd line is not just the performer links or ticket info
+                                        if not any(k in second_line.upper() for k in ["OPEN", "START", "ADV", "DOOR", "TICKET", "TIGET", "LIVEPOCKET"]):
+                                            # And not just another artist name
+                                            if not any(ap in second_line for ap in artist_links):
+                                                title = second_line
+                                                break
+                                else:
+                                    # Fallback: remove the artist name from anywhere if it leaves significant text
+                                    new_t = cand_title.replace(p, "").strip()
+                                    if len(new_t) > 5: title = new_t; break
+                    
+                    # If we don't have link performers, fall back to line-based
+                    if not link_performers_str and len(s_lines) > 1:
                         p_cand = []
-                        for line in lines[1:]:
+                        for line in s_lines[1:]:
                             if any(k in line.upper() for k in ["OPEN", "START", "ADV", "DOOR"]): break
                             p_cand.append(line)
                         if p_cand: performers_str = " / ".join(p_cand)
@@ -775,24 +832,10 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
                 
                 # Price
                 price_info = ""
-                for line in lines:
+                for line in s_lines:
                     if any(k in line for k in ["前売", "当日", "ADV", "DOOR", "￥", "¥"]):
                         price_info = sanitize_price_info(line)
                         break
-                
-                # Ticket URL (inside this slot)
-                # Note: We need to find the link within the specific part of content_elem if possible, 
-                # but inner_text doesn't give links. We should use the slot's relative position or search in HTML.
-                ticket_url = None
-                # Simple approach: if there's only one link in the whole post, use it. 
-                # If multiple, this is tricky with inner_text splitting.
-                # Let's try to find a link that appears near the price/times in the HTML.
-                t_links = await content_elem.query_selector_all('a[href*="livepocket"], a[href*="ticketdive"], a[href*="tiget"], a[href*="eplus"]')
-                if len(t_links) == len(event_slots):
-                    idx = event_slots.index(slot)
-                    ticket_url = await t_links[idx].get_attribute("href")
-                elif t_links:
-                    ticket_url = await t_links[0].get_attribute("href")
 
                 curr_image_url = image_url
                 if not curr_image_url and ticket_url: curr_image_url = fetch_og_image(ticket_url)
@@ -804,7 +847,7 @@ async def scrape_shangrila_events(page, db_session, youtube_fetch_count: int, pe
                         if hour >= 21 or hour < 4: is_midnight = True
                     except: pass
 
-                artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+                artist_info_list, youtube_fetch_count = get_artist_video_info(performers_str, db_session, youtube_fetch_count, pending_reports, only_cache=True)
                 event_data = {
                     'title': title, 'date': found_date.date(), 'performers': performers_str,
                     'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
@@ -910,7 +953,7 @@ async def scrape_reg_events(page, db_session, youtube_fetch_count: int, pending_
                     if hour >= 21 or hour < 4: is_midnight = True
                 except: pass
 
-            artist_info_list, youtube_fetch_count = get_artist_video_info(db_session, performers_str, youtube_fetch_count, pending_reports, only_cache=True)
+            artist_info_list, youtube_fetch_count = get_artist_video_info(performers_str, db_session, youtube_fetch_count, pending_reports, only_cache=True)
             event_data = {
                 'title': title, 'date': event_date.date(), 'performers': performers_str,
                 'open_time': open_time, 'start_time': start_time, 'price_info': price_info,
@@ -944,7 +987,7 @@ def sync_prioritized_artist_videos(db_session, youtube_fetch_count: int) -> int:
 
     for artist_name in sorted_artists:
         if youtube_fetch_count >= DAILY_FETCH_LIMIT: break
-        res_list, new_count = get_artist_video_info(db_session, artist_name, youtube_fetch_count, pending_reports_dict, only_cache=False)
+        res_list, new_count = get_artist_video_info(artist_name, db_session, youtube_fetch_count, pending_reports_dict, only_cache=False)
         if new_count > youtube_fetch_count or (res_list and res_list[0]['youtube_id']):
             vid = res_list[0]['youtube_id']
             for ev in artist_events[artist_name]:
