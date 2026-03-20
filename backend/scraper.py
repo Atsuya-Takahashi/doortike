@@ -194,9 +194,10 @@ def get_artist_video_info(db_session, performers_str: str, youtube_fetch_count: 
     names = [a.strip() for a in re.split(patterns, performers_str) if a.strip()]
 
     for artist_name in names:
-        artist_name = re.sub(r'^[【\[\(](出演|会場|開場|開演|O\.A\.|OA|Opening Act)[】\]\)]\s*', '', artist_name, flags=re.IGNORECASE)
-        artist_name = re.sub(r'^(出演|会場|開場|開演|O\.A\.|OA|Opening Act)[:：]\s*', '', artist_name, flags=re.IGNORECASE)
-        artist_name = re.sub(r'\s*[（\(\[【](O\.A\.|OA|Opening Act)[）\)\]】]$', '', artist_name, flags=re.IGNORECASE)
+        # Removal logic for common tags and roles
+        artist_name = re.sub(r'^[【\[\(](出演|会場|開場|開演|O\.A\.|OA|Opening Act|GUEST|ゲストアクト)[】\]\)]\s*', '', artist_name, flags=re.IGNORECASE)
+        artist_name = re.sub(r'^(出演|会場|開場|開演|O\.A\.|OA|Opening Act|GUEST|ゲストアクト)[:：]\s*', '', artist_name, flags=re.IGNORECASE)
+        artist_name = re.sub(r'\s*[（\(\[【](O\.A\.|OA|Opening Act|GUEST|ゲストアクト)[）\)\]】]$', '', artist_name, flags=re.IGNORECASE)
         artist_name = re.sub(r'\s*[（\(\[【](Vo|Gt|Ba|Dr|Key|Per|Syn|Vj|DJ|Cho|Vocal|Guitar|Bass|Drums|Keyboard|Percussion)[\.\-]?.*?[）\)\]】]', '', artist_name, flags=re.IGNORECASE)
         artist_name = artist_name.strip()
         
