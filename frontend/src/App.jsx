@@ -25,7 +25,9 @@ function App() {
         if (!isNaN(parsedDate.getTime())) return parsedDate;
       }
     } catch (e) {}
-    return new Date();
+    // Default to business-day "Today" (if before 4 AM, it's actually previous calendar day)
+    const now = new Date();
+    return now.getHours() < 4 ? addDays(now, -1) : now;
   })
 
   const [selectedPrefecture, setSelectedPrefecture] = useState(() => {
@@ -98,6 +100,8 @@ function App() {
       return []
     }
   })
+
+  const [showScrollTop, setShowScrollTop] = useState(false)
 
   const [zoomedImage, setZoomedImage] = useState(null)
 
@@ -790,8 +794,7 @@ function App() {
 
   // Handle late-night events: if it's before 4 AM, "today" should be the previous calendar day.
   const now = new Date()
-  const today = new Date(now)
-  // Remove 4 AM shift here as well for consistent reference
+  const today = now.getHours() < 4 ? addDays(now, -1) : now
   const tomorrow = addDays(today, 1)
 
   const todayStr = format(today, 'yyyy-MM-dd')
@@ -818,6 +821,19 @@ function App() {
       setIsBookmarksModalOpen(false)
     }
   }, [upcomingBookmarksCount, isBookmarksModalOpen])
+
+  // Handle scroll visibility for "Back to Top" button
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true)
+      } else {
+        setShowScrollTop(false)
+      }
+    }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // === Handlers for scroll buttons ===
   const scrollToTop = () => {
@@ -1479,11 +1495,14 @@ function App() {
       {/* --- Floating Navigation Bar --- */}
       {!isBookmarksModalOpen && !isPurchaseModalOpen && !isPassModalOpen && !isAuthModalOpen && (
         <div className="floating-nav-bar">
-          <button className="nav-btn" onClick={scrollToTop} aria-label="トップへ戻る" title="トップへ戻る">
-            <ArrowUp size={22} />
-          </button>
-
-          <div className="nav-divider" />
+          {showScrollTop && (
+            <>
+              <button className="nav-btn" onClick={scrollToTop} aria-label="トップへ戻る" title="トップへ戻る">
+                <ArrowUp size={22} />
+              </button>
+              <div className="nav-divider" />
+            </>
+          )}
 
           <button
             className="nav-btn"

@@ -35,12 +35,15 @@ async def wait_random(multiplier: float = 1.0):
 
 def sanitize_price_info(text):
     if not text: return ""
+    # Remove OPEN/START labels and times which often appear on the same line as prices (e.g. ERA)
+    text = re.sub(r'(?:OPEN|START)\s*(?:\d{2}:\d{2})?', '', text, flags=re.IGNORECASE)
     lines = text.split('\n')
     clean_lines = []
     
     skip_keywords = [
         "学割", "学生証", "チケット予約", "【TICKET】", "チケット販売", 
-        "販売中", "予約受付中", "ぴあ", "ローソン", "ローチケ", "e+", "イープラス"
+        "販売中", "予約受付中", "ぴあ", "ローソン", "ローチケ", "e+", "イープラス",
+        "Livepocket", "LivePocket", "TIGET", "ＴＩＧＥＴ", "●", "プレイガイド"
     ]
     
     stop_keywords = [
@@ -187,9 +190,9 @@ def get_artist_video_info(performers_str: str, db_session, youtube_fetch_count: 
         return [], youtube_fetch_count
 
     artist_list = []
-    # Use standard delimiters like full-width spaces, commas, and slashes.
-    # Avoid half-width spaces as they are common in tour titles and event names.
-    patterns = r'[、,／/\n　]'
+    # Explicitly define delimiters: comma, ideographic comma, full-width slash, half-width slash, newline, and full-width space.
+    # Half-width spaces (U+0020) are DELIBERATELY EXCLUDED to support names like "Artist A & Artist B".
+    patterns = r'[、,／/\n\u3000]'
     names = [a.strip() for a in re.split(patterns, performers_str) if a.strip()]
 
     for artist_name in names:
@@ -391,10 +394,18 @@ async def scrape_loft_project_venue(page, venue_name: str, venue_slug: str, targ
                         if act_match:
                             performers_str = " / ".join([p.strip() for p in re.split(r'[\n／/]', act_match.group(1)) if p.strip()])
 
+                # Special handling for birthday events to extract main artist from title
                 if "生誕" in title or "BD" in title or "BIRTHDAY" in title.upper():
-                    main_name = title.split('生誕')[0].split('BIRTHDAY')[0].strip()
-                    if main_name and main_name not in performers_str:
-                        performers_str = f"{main_name}, {performers_str}" if performers_str else main_name
+                    # Split by birthday markers
+                    parts = re.split(r'生誕|BD|BIRTHDAY', title, flags=re.IGNORECASE)
+                    main_cand = parts[0].strip()
+                    # Remove organizer/series prefixes like "○○企画", "○○ vol.1", "○○ presents"
+                    main_cand = re.sub(r'^.*(?:企画|制作|presents|vol\.\d+)\s*', '', main_cand, flags=re.IGNORECASE)
+                    # Clean up brackets
+                    main_cand = main_cand.replace('『', '').replace('』', '').replace('「', '').replace('」', '').strip()
+                    
+                    if main_cand and len(main_cand) > 1 and main_cand not in performers_str:
+                        performers_str = f"{main_cand}, {performers_str}" if performers_str else main_cand
                 
                 open_time, start_time = "", ""
                 time_dt_elem = await detail_page.query_selector('.open, .open-start')
@@ -619,6 +630,7 @@ async def scrape_club251_events(page, db_session, youtube_fetch_count, pending_r
             match = re.search(r'(\d+)', await date_elem.text_content())
             if not match: continue
             event_date = now_jst.replace(day=int(match.group(1)))
+            print(f"DEBUG CLUB251: Found date {match.group(1)} -> event_date: {event_date.date()}")
             found_date = next((td for td in target_dates if td.date() == event_date.date()), None)
             if not found_date: continue
 
@@ -974,7 +986,7 @@ def sync_prioritized_artist_videos(db_session, youtube_fetch_count: int) -> int:
     artist_priority, artist_events = {}, {}
     for event in upcoming_events:
         if not event.performers: continue
-        names = [a.strip() for a in re.split(r'[、,／/\n]', event.performers) if a.strip()]
+        names = [a.strip() for a in re.split(r'[、,／/\n\u3000]', event.performers) if a.strip()]
         for name in names:
             if name not in artist_priority:
                 artist_priority[name], artist_events[name] = event.date, []
