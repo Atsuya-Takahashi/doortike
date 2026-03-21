@@ -857,8 +857,10 @@ function App() {
   // === Filtering Logic ===
   const isFreeEvent = (priceInfo) => {
     if (!priceInfo) return false
-    const freeKeywords = ['0円', '¥0', '無料', '0 yen', 'free']
-    return freeKeywords.some(keyword => priceInfo.toLowerCase().includes(keyword))
+    // Match "0円", "¥0", "無料", "0 yen", "free" strictly (not part of larger numbers like 4000)
+    const normalized = priceInfo.toLowerCase()
+    const freeRegex = /(^|[^0-9])(0円|¥0|無料|0\s?yen|free)(\s|$|[^0-9a-z])/i
+    return freeRegex.test(normalized)
   }
 
   const filteredEvents = useMemo(() => {
