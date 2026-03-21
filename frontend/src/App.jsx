@@ -525,6 +525,15 @@ function App() {
   }
 
   // Navigation Logic (Manual Router)
+  useEffect(() => {
+    if (zoomedImage) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [zoomedImage])
+
   const navigateTo = (newPath) => {
     window.history.pushState({}, '', newPath)
     setPath(newPath)
