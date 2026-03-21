@@ -63,17 +63,17 @@ def standardize_price_info(text: str) -> str:
     else:
         parts = []
         if adv_match:
-            val = adv_match.group(1).replace(',', '')
-            parts.append(f"ADV ¥{val}")
+            val = int(adv_match.group(1).replace(',', ''))
+            parts.append(f"ADV ¥{val:,}")
         if door_match:
-            val = door_match.group(1).replace(',', '')
-            parts.append(f"DOOR ¥{val}")
+            val = int(door_match.group(1).replace(',', ''))
+            parts.append(f"DOOR ¥{val:,}")
         res = " / ".join(parts)
         
     # Append drink info if found
     if drink_match:
-        d_val = drink_match.group(1)
-        res += f" (+1D¥{d_val})"
+        d_val = int(drink_match.group(1).replace(',', ''))
+        res += f" (+1D¥{d_val:,})"
     elif "+1D" in norm.upper() or "ドリンク別" in norm:
         # Marker without value
         if "(+1D" not in res:
