@@ -1533,15 +1533,29 @@ function App() {
           className={`flyer-zoom-overlay ${zoomedImage ? 'active' : ''}`}
           onClick={() => setZoomedImage(null)}
         >
-          <div className="flyer-zoom-content">
+          <div className="flyer-zoom-content" onClick={(e) => e.stopPropagation()}>
             <img 
-              src={zoomedImage 
+              src={typeof zoomedImage === 'string' 
                 ? (zoomedImage.startsWith('https') ? zoomedImage : `https://images.weserv.nl/?url=${encodeURIComponent(zoomedImage)}&default=https://doortike.com/ogp.png`)
-                : "https://doortike.com/ogp.png"} 
+                : (zoomedImage.url.startsWith('https') ? zoomedImage.url : `https://images.weserv.nl/?url=${encodeURIComponent(zoomedImage.url)}&default=https://doortike.com/ogp.png`)
+              } 
               alt="Flyer Zoom"
               className="flyer-zoom-image"
               style={{ cursor: 'zoom-out' }}
+              onClick={() => setZoomedImage(null)}
             />
+            {typeof zoomedImage === 'object' && zoomedImage.sourceName && (
+              <div className="flyer-source-info">
+                出典：<a 
+                  href={addUtmParams(zoomedImage.sourceUrl || '#', 'flyer_zoom_source')} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flyer-source-link"
+                >
+                  {zoomedImage.sourceName}
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2579,7 +2593,11 @@ const EventCard = ({
                   ? (evt.image_url.startsWith('https') ? evt.image_url : `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}&default=https://doortike.com/ogp.png`)
                   : "https://doortike.com/ogp.png"}
                 alt="Thumbnail"
-                onClick={() => setZoomedImage(evt.image_url)}
+                onClick={() => setZoomedImage({
+                  url: evt.image_url,
+                  sourceName: evt.livehouse.name,
+                  sourceUrl: evt.livehouse.url
+                })}
                 style={{ 
                   position: 'absolute', 
                   top: 0, 
