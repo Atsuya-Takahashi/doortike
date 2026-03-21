@@ -25,9 +25,9 @@ function App() {
         if (!isNaN(parsedDate.getTime())) return parsedDate;
       }
     } catch (e) {}
-    // Default to business-day "Today" (if before 4 AM, it's actually previous calendar day)
+    // Default to actual today (midnight switch)
     const now = new Date();
-    return now.getHours() < 4 ? addDays(now, -1) : now;
+    return now;
   })
 
   const [selectedPrefecture, setSelectedPrefecture] = useState(() => {
@@ -364,7 +364,7 @@ function App() {
             }
           },
           "image": evt.image_url 
-            ? (evt.image_url.startsWith('https') ? evt.image_url : `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}&default=https://doortike.com/ogp.png`)
+            ? (evt.image_url.startsWith('https') || evt.image_url.startsWith('/assets/') ? evt.image_url : `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}&default=https://doortike.com/ogp.png`)
             : "https://doortike.com/ogp.png",
           "description": `${evt.livehouse.name}で開催されるライブ情報。出演: ${Array.isArray(evt.artists_data) ? evt.artists_data.map(a => a?.name).filter(Boolean).join(', ') : '各アーティスト'}`,
           "offers": {
@@ -802,9 +802,8 @@ function App() {
 
   const isEventBookmarked = (id) => bookmarkedEvents.some(b => b.id === id)
 
-  // Handle late-night events: if it's before 4 AM, "today" should be the previous calendar day.
   const now = new Date()
-  const today = now.getHours() < 4 ? addDays(now, -1) : now
+  const today = now
   const tomorrow = addDays(today, 1)
 
   const todayStr = format(today, 'yyyy-MM-dd')
@@ -1582,8 +1581,8 @@ function App() {
           <div className="flyer-zoom-content" onClick={(e) => e.stopPropagation()}>
             <img 
               src={typeof zoomedImage === 'string' 
-                ? (zoomedImage.startsWith('https') ? zoomedImage : `https://images.weserv.nl/?url=${encodeURIComponent(zoomedImage)}&default=https://doortike.com/ogp.png`)
-                : (zoomedImage.url.startsWith('https') ? zoomedImage.url : `https://images.weserv.nl/?url=${encodeURIComponent(zoomedImage.url)}&default=https://doortike.com/ogp.png`)
+                ? (zoomedImage.startsWith('https') || zoomedImage.startsWith('/assets/') ? zoomedImage : `https://images.weserv.nl/?url=${encodeURIComponent(zoomedImage)}&default=https://doortike.com/ogp.png`)
+                : (zoomedImage.url.startsWith('https') || zoomedImage.url.startsWith('/assets/') ? zoomedImage.url : `https://images.weserv.nl/?url=${encodeURIComponent(zoomedImage.url)}&default=https://doortike.com/ogp.png`)
               } 
               alt="Flyer Zoom"
               className="flyer-zoom-image"
@@ -1603,7 +1602,7 @@ function App() {
               </div>
             )}
             
-            <p className="flyer-zoom-hint">背景をタップまたは下スワイプで閉じる</p>
+            <p className="flyer-zoom-hint">背景をタップまたは下スワイプで閉じる (v3)</p>
           </div>
         </div>
       )}
@@ -1632,7 +1631,7 @@ function App() {
 
           <div className="flyer-zoom-content" onClick={(e) => e.stopPropagation()}>
             <img 
-              src="/assets/help_guide.png" 
+              src="/assets/help_guide_v3.png" 
               alt="使い方ガイド"
               className="flyer-zoom-image"
               style={{ cursor: 'default', maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain' }}
@@ -2677,7 +2676,7 @@ const EventCard = ({
             {evt.image_url && (
               <img
                 src={evt.image_url 
-                  ? (evt.image_url.startsWith('https') ? evt.image_url : `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}&default=https://doortike.com/ogp.png`)
+                  ? (evt.image_url.startsWith('https') || evt.image_url.startsWith('/assets/') ? evt.image_url : `https://images.weserv.nl/?url=${encodeURIComponent(evt.image_url)}&default=https://doortike.com/ogp.png`)
                   : "https://doortike.com/ogp.png"}
                 alt="Thumbnail"
                 onClick={() => setZoomedImage({
