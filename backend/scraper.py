@@ -33,6 +33,54 @@ async def wait_random(multiplier: float = 1.0):
     delay = random.uniform(*SCRAPE_RANDOM_DELAY_RANGE) * multiplier
     await asyncio.sleep(delay)
 
+def standardize_price_info(text: str) -> str:
+    """Unify price format to 'ADV ¥xxxx / DOOR ¥xxxx (+1D¥xxx)'."""
+    if not text: return ""
+    
+    # Normalize half-width/full-width and spaces
+    norm = text.replace('￥', '¥').replace('＋', '+').replace('　', ' ').strip()
+    norm = re.sub(r'[\r\n\t]+', ' ', norm) # Flatten lines for regex
+    
+    # Extract values
+    # ADV: looks for ADV or 前売/前売り
+    adv_match = re.search(r'(?:ADV|前売[り]?)[ ]*[¥￥]?[ ]*([\d,]+)', norm, re.IGNORECASE)
+    # DOOR: looks for DOOR or 当日
+    door_match = re.search(r'(?:DOOR|当日)[ ]*[¥￥]?[ ]*([\d,]+)', norm, re.IGNORECASE)
+    # DRINK: looks for D代, ドリンク, +1D, D¥700 etc.
+    drink_match = re.search(r'(?:D[代]|ドリンク|(?:\+|D))[ ]*[¥]?(\d{3,4})', norm, re.IGNORECASE)
+    
+    if not adv_match and not door_match:
+        # If no explicit labels, try finding just the prices
+        prices = re.findall(r'[¥](\d{1,3}(?:,\d{3})*)', norm)
+        if len(prices) >= 2:
+            adv_val = prices[0].replace(',', '')
+            door_val = prices[1].replace(',', '')
+            res = f"ADV ¥{adv_val} / DOOR ¥{door_val}"
+        elif len(prices) == 1:
+            res = f"TICKETS ¥{prices[0].replace(',', '')}"
+        else:
+            return text
+    else:
+        parts = []
+        if adv_match:
+            val = adv_match.group(1).replace(',', '')
+            parts.append(f"ADV ¥{val}")
+        if door_match:
+            val = door_match.group(1).replace(',', '')
+            parts.append(f"DOOR ¥{val}")
+        res = " / ".join(parts)
+        
+    # Append drink info if found
+    if drink_match:
+        d_val = drink_match.group(1)
+        res += f" (+1D¥{d_val})"
+    elif "+1D" in norm.upper() or "ドリンク別" in norm:
+        # Marker without value
+        if "(+1D" not in res:
+            res += " (+1D)"
+
+    return res if res else text
+
 def sanitize_price_info(text):
     if not text: return ""
     # Remove OPEN/START labels and times which often appear on the same line as prices (e.g. ERA)
@@ -66,7 +114,8 @@ def sanitize_price_info(text):
             
         clean_lines.append(line_clean)
         
-    return "\n".join(clean_lines).strip()
+    raw_clean = "\n".join(clean_lines).strip()
+    return standardize_price_info(raw_clean)
 
 DAILY_FETCH_LIMIT = 90
 SCRAPE_DAYS = 30
