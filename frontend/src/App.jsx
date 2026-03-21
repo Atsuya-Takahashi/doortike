@@ -57,8 +57,8 @@ function App() {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false)
   const [showOnlyLiked, setShowOnlyLiked] = useState(false)
   const [showOnlyFree, setShowOnlyFree] = useState(false)
-  const [authMode, setAuthMode] = useState('login') // 'login' or 'signup'
   const [displayName, setDisplayName] = useState('')
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
   const [path, setPath] = useState(window.location.pathname) // Manual routing
 
   // Auth State
@@ -1229,6 +1229,24 @@ function App() {
                 ドアチケ
               </span>
             </h1>
+            <div style={{ position: 'absolute', right: '15px', height: '100%', display: 'flex', alignItems: 'center' }}>
+              <button
+                onClick={() => setIsHelpModalOpen(true)}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  fontSize: '1.4rem', 
+                  cursor: 'pointer', 
+                  padding: '5px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  opacity: 0.9
+                }}
+                aria-label="使い方ガイド"
+              >
+                🔰
+              </button>
+            </div>
           </header>
 
           <div className="location-filters" style={{ padding: '10px 10px 10px' }}>
@@ -1584,6 +1602,45 @@ function App() {
                 </a>
               </div>
             )}
+            
+            <p className="flyer-zoom-hint">背景をタップまたは下スワイプで閉じる</p>
+          </div>
+        </div>
+      )}
+
+      {/* --- Help / Usage Modal --- */}
+      {isHelpModalOpen && (
+        <div 
+          className={`flyer-zoom-overlay active`}
+          onClick={() => setIsHelpModalOpen(false)}
+          onTouchStart={(e) => setTouchStartY(e.touches[0].clientY)}
+          onTouchEnd={(e) => {
+            const touchEndY = e.changedTouches[0].clientY;
+            if (touchStartY !== null && touchEndY - touchStartY > 100) {
+              setIsHelpModalOpen(false);
+            }
+            setTouchStartY(null);
+          }}
+        >
+          <button 
+            className="flyer-zoom-close-fixed" 
+            onClick={() => setIsHelpModalOpen(false)}
+            aria-label="閉じる"
+          >
+            <X size={28} />
+          </button>
+
+          <div className="flyer-zoom-content" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src="/assets/help_guide.png" 
+              alt="使い方ガイド"
+              className="flyer-zoom-image"
+              style={{ cursor: 'default', maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain' }}
+              onError={(e) => {
+                e.target.src = "https://placehold.jp/24/333333/ffffff/600x800.png?text=使い方ガイド画像\n(後ほど差し替え)";
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
             
             <p className="flyer-zoom-hint">背景をタップまたは下スワイプで閉じる</p>
           </div>
