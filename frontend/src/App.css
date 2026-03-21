@@ -1578,29 +1578,42 @@
   color: var(--accent-color);
 }
 
-.flyer-zoom-close {
-  position: absolute;
-  top: -40px;
-  right: 0;
-  background: white;
-  color: #333;
-  border: none;
+.flyer-zoom-close-fixed {
+  position: fixed;
+  top: 20px;
+  top: max(20px, env(safe-area-inset-top));
+  right: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 10001;
+  transition: all 0.2s;
 }
 
-.flyer-zoom-close:hover {
-  transform: scale(1.1) rotate(90deg);
-  background: var(--accent-color);
-  color: white;
+.flyer-zoom-close-fixed:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.1);
+}
+
+.flyer-zoom-hint {
+  position: absolute;
+  bottom: -40px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.75rem;
+  pointer-events: none;
+  animation: fadeIn 0.6s ease-out;
 }
 
 @media (max-width: 768px) {

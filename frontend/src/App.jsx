@@ -104,6 +104,7 @@ function App() {
   const [showScrollTop, setShowScrollTop] = useState(false)
 
   const [zoomedImage, setZoomedImage] = useState(null)
+  const [touchStartY, setTouchStartY] = useState(null)
 
   const [bookmarkedEvents, setBookmarkedEvents] = useState(() => {
     try {
@@ -1532,7 +1533,23 @@ function App() {
         <div 
           className={`flyer-zoom-overlay ${zoomedImage ? 'active' : ''}`}
           onClick={() => setZoomedImage(null)}
+          onTouchStart={(e) => setTouchStartY(e.touches[0].clientY)}
+          onTouchEnd={(e) => {
+            const touchEndY = e.changedTouches[0].clientY;
+            if (touchStartY !== null && touchEndY - touchStartY > 100) {
+              setZoomedImage(null);
+            }
+            setTouchStartY(null);
+          }}
         >
+          <button 
+            className="flyer-zoom-close-fixed" 
+            onClick={() => setZoomedImage(null)}
+            aria-label="閉じる"
+          >
+            <X size={28} />
+          </button>
+
           <div className="flyer-zoom-content" onClick={(e) => e.stopPropagation()}>
             <img 
               src={typeof zoomedImage === 'string' 
@@ -1541,8 +1558,8 @@ function App() {
               } 
               alt="Flyer Zoom"
               className="flyer-zoom-image"
-              style={{ cursor: 'zoom-out' }}
-              onClick={() => setZoomedImage(null)}
+              style={{ cursor: 'default' }}
+              onClick={(e) => e.stopPropagation()}
             />
             {typeof zoomedImage === 'object' && zoomedImage.sourceName && (
               <div className="flyer-source-info">
@@ -1556,6 +1573,8 @@ function App() {
                 </a>
               </div>
             )}
+            
+            <p className="flyer-zoom-hint">背景をタップまたは下スワイプで閉じる</p>
           </div>
         </div>
       )}
